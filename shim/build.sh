@@ -13,7 +13,7 @@ done
 # header's image_size (start.o, linked at 0) may be an absolute address.
 abs=$(aarch64-linux-gnu-readelf -r out/shim.o out/console.o out/mmu.o out/fdt.o out/loader.o out/ufs.o | grep -c ABS64 || true)
 [ "$abs" = 0 ] || { echo "error: $abs absolute relocations in C objects" >&2; exit 1; }
-$CC $CFLAGS -static -T shim.ld -Wl,--build-id=none -Wl,--no-warn-rwx-segments -Wl,-N \
+$CC $CFLAGS -static -T shim.ld -Wl,--build-id=none -Wl,-N \
 	out/start.o out/shim.o out/console.o out/mmu.o out/fdt.o out/loader.o out/ufs.o -o out/shim.elf
 $OBJCOPY -O binary out/shim.elf out/Image
 # Bootloader copies the file; pad to image_size so .bss/stacks exist as zeroed bytes.
@@ -26,11 +26,19 @@ if [ -n "${1:-}" ]; then
 else
 	(cd out && rm -rf rd && mkdir rd && cd rd && find . | cpio -o -H newc --quiet | gzip -9 > ../ramdisk.bin)
 fi
-mkbootimg --header_version 2 --kernel out/Image --ramdisk out/ramdisk.bin \
-	--dtb ../dtb/boot_unpacked/dtb --base 0 --kernel_offset 0x8000 --ramdisk_offset 0x1000000 \
-	--tags_offset 0x100 --dtb_offset 0x1f00000 --pagesize 4096 \
-	--os_version 17.0.0 --os_patch_level 2035-06 \
-	--cmdline "console=null" -o out/shim-boot.img
+
+if command -v mkbootimg >/dev/null 2>&1; then
+	mkbootimg --header_version 2 --kernel out/Image --ramdisk out/ramdisk.bin \
+		--dtb ../dtb/boot_unpacked/dtb --base 0 --kernel_offset 0x8000 --ramdisk_offset 0x2000000 \
+		--tags_offset 0x1e00000 --dtb_offset 0x1f00000 --pagesize 4096 \
+		--os_version 17.0.0 --os_patch_level 2035-06 \
+		--cmdline "console=null" -o out/shim-boot.img
+else
+	python3 ../tools/mkbootv2.py --kernel out/Image --ramdisk out/ramdisk.bin \
+		--dtb ../dtb/boot_unpacked/dtb --base 0 --kernel_offset 0x8000 --ramdisk_offset 0x2000000 \
+		--tags_offset 0x1e00000 --dtb_offset 0x1f00000 --pagesize 4096 \
+		--cmdline "console=null" -o out/shim-boot.img
+fi
 
 # Package Odin flashable tar for Samsung devices (Galaxy A71 4G)
 if command -v python3 >/dev/null 2>&1; then
