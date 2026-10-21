@@ -1,8 +1,10 @@
-# ios-sweet
+# ios-a71
 
-**Apple's iOS 16 running on a Redmi Note 10 Pro.**
+**Apple's iOS 16 userland and XNU kernel ported to Qualcomm SM7150 hardware (Samsung Galaxy A71 4G / Xiaomi Redmi Note 10 Pro).**
 
-This project ports Apple's open-source XNU kernel (xnu-8796, the iOS 16 generation) to the Xiaomi Redmi Note 10 Pro (`sweet`, Qualcomm SM7150 / Snapdragon 732G). On top of it runs the **unmodified iOS 16.7.16 (20H392) userland of the iPhone X**: launchd, the system daemons, backboardd, SpringBoard and the stock apps.
+This repository adapts Apple's open-source XNU kernel (`xnu-8796`, iOS 16 generation) and an unmodified **iOS 16.7.16 (`20H392`) userland of the iPhone X** (`iPhone10,3` / `D22AP`) for devices powered by the **Qualcomm Snapdragon 730 / 732G (`SM7150`)** platform family, specifically:
+- **Samsung Galaxy A71 4G** (`SM-A715F` / `a71` / `a715f`) &mdash; [Read the Galaxy A71 Port Guide](docs/galaxy-a71-port.md)
+- **Xiaomi Redmi Note 10 Pro** (`sweet`, upstream bring-up)
 
 As of **2026-10-18** the phone boots to the **iOS home screen**. You can unlock it, open Settings, pull down Control Center and the notification center, and use the touchscreen and the hardware buttons. Rendering runs entirely on the CPU; there is no GPU driver.
 
