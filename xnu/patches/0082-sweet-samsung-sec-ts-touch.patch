@@ -39,7 +39,7 @@ index 03defe6..8c20831 100644
  	bool started, dead, probing;
  	int kind, irq_hint;
  	uint32_t irq_status, irq_last, active;
-@@ -133,6 +147,23 @@ touch_gpio(unsigned pin, unsigned mux, unsigned pull, unsigned drive, bool out,
+@@ -133,6 +147,74 @@ touch_gpio(unsigned pin, unsigned mux, unsigned pull, unsigned drive, bool out,
  	touch_wr(st.gpio, off, cfg);
  }
  
@@ -50,20 +50,72 @@ index 03defe6..8c20831 100644
 +		return;
 +	}
 +	uint32_t off = TOUCH_GPIO_CFG(pin);
-+	uint32_t cfg = touch_rd(st.gpio_west, off);
 +	if (out) {
 +		touch_wr(st.gpio_west, TOUCH_GPIO_IO(pin),
 +		    (touch_rd(st.gpio_west, TOUCH_GPIO_IO(pin)) & ~2u) | (high ? 2u : 0u));
 +	}
++	uint32_t cfg = touch_rd(st.gpio_west, off);
 +	cfg &= ~0x3ffu;
 +	cfg |= (mux << 2) | pull | (drive << 6) | (out ? 0x200u : 0u);
 +	touch_wr(st.gpio_west, off, cfg);
 +}
 +
++static void
++touch_power_dvdd(void)
++{
++	vm_offset_t core = ml_io_map(0x0c440000u, 0x2000);
++	vm_offset_t cnfg = ml_io_map(0x0c40a000u, 0x1000);
++	vm_offset_t obs  = ml_io_map(0x0e600000u, 0x10000);
++	if (!core || !cnfg || !obs) {
++		printf("SWEET TOUCH: SPMI map failed\n");
++		return;
++	}
++	uint32_t count = touch_rd(core, 4) & 0x7ffu;
++	uint16_t apid = 0xffffu;
++	for (uint32_t i = 0; i < count; ++i) {
++		uint32_t map = touch_rd(core, 0x900u + 4u * i);
++		if (((map >> 8) & 0xfffu) == 0x0c3u) {
++			uint32_t owner = touch_rd(cnfg, 0x700u + 4u * i) & 7u;
++			if (apid == 0xffffu || owner == 0) {
++				apid = (uint16_t)i;
++			}
++		}
++	}
++	if (apid == 0xffffu) {
++		printf("SWEET TOUCH: PM6150 GPIO4 APID not found\n");
++		return;
++	}
++	uint32_t obs_off = 0x80u * apid;
++	uint8_t en = 0, out = 0;
++	touch_wr(obs, obs_off, (1u << 27) | (0x46u << 4));
++	for (int j = 0; j < 500; j++) { if (touch_rd(obs, obs_off + 8) & 1u) { en = (uint8_t)touch_rd(obs, obs_off + 0x18); break; } delay(1); }
++	touch_wr(obs, obs_off, (1u << 27) | (0x45u << 4));
++	for (int j = 0; j < 500; j++) { if (touch_rd(obs, obs_off + 8) & 1u) { out = (uint8_t)touch_rd(obs, obs_off + 0x18); break; } delay(1); }
++	printf("SWEET TOUCH: PM6150 GPIO4 apid=%u init en=%#x out=%#x\n", apid, en, out);
++
++	vm_offset_t chnl = ml_io_map(0x0c600000u + 0x10000u * (vm_offset_t)apid, 0x1000);
++	if (chnl) {
++		touch_wr(chnl, 0x10, 1u);
++		touch_wr(chnl, 0x00, (0u << 27) | (0x45u << 4) | 0u);
++		for (int j = 0; j < 500; j++) { if (touch_rd(chnl, 8) & 1u) break; delay(1); }
++		touch_wr(chnl, 0x10, 1u);
++		touch_wr(chnl, 0x00, (0u << 27) | (0x40u << 4) | 0u);
++		for (int j = 0; j < 500; j++) { if (touch_rd(chnl, 8) & 1u) break; delay(1); }
++		touch_wr(chnl, 0x10, 0x80u);
++		touch_wr(chnl, 0x00, (0u << 27) | (0x46u << 4) | 0u);
++		for (int j = 0; j < 500; j++) { if (touch_rd(chnl, 8) & 1u) break; delay(1); }
++		touch_wr(obs, obs_off, (1u << 27) | (0x46u << 4));
++		for (int j = 0; j < 500; j++) { if (touch_rd(obs, obs_off + 8) & 1u) { en = (uint8_t)touch_rd(obs, obs_off + 0x18); break; } delay(1); }
++		touch_wr(obs, obs_off, (1u << 27) | (0x45u << 4));
++		for (int j = 0; j < 500; j++) { if (touch_rd(obs, obs_off + 8) & 1u) { out = (uint8_t)touch_rd(obs, obs_off + 0x18); break; } delay(1); }
++		printf("SWEET TOUCH: PM6150 GPIO4 DVDD active en=%#x out=%#x\n", en, out);
++	}
++}
++
  static bool
  touch_clocks(void)
  {
-@@ -487,6 +518,62 @@ touch_focaltech(void)
+@@ -487,6 +569,65 @@ touch_focaltech(void)
  	return 0;
  }
  
@@ -85,7 +137,7 @@ index 03defe6..8c20831 100644
 +			return err;
 +		}
 +		if (buf[0] == 0 || (buf[0] & 3u) == 3u) {
-+			break; /* Buffer empty or empty event */
++			break; /* Buffer empty */
 +		}
 +		uint8_t eid = buf[0] & 3u;
 +		if (eid == SEC_TS_COORDINATE_EVENT) {
@@ -93,22 +145,25 @@ index 03defe6..8c20831 100644
 +			uint8_t tchsta = (buf[0] >> 6) & 0x03u;
 +			if (tid >= 1 && tid <= TOUCH_MAX) {
 +				unsigned id = tid - 1u;
-+				unsigned px = ((unsigned)buf[1] << 4) | ((buf[3] >> 4) & 0x0fu);
-+				unsigned py = ((unsigned)buf[2] << 4) | (buf[3] & 0x0fu);
-+				if (px <= 1079 && py <= 2399) {
-+					if (tchsta == SEC_TS_COORDINATE_ACTION_PRESS ||
-+					    tchsta == SEC_TS_COORDINATE_ACTION_MOVE) {
-+						mask |= (1u << id);
-+						x[id] = (int)px;
-+						y[id] = (int)py;
-+					} else if (tchsta == SEC_TS_COORDINATE_ACTION_RELEASE) {
-+						mask &= ~(1u << id);
-+					}
++				unsigned raw_x = ((unsigned)buf[1] << 4) | ((buf[3] >> 4) & 0x0fu);
++				unsigned raw_y = ((unsigned)buf[2] << 4) | (buf[3] & 0x0fu);
++				unsigned px = raw_x > 1079u ? (raw_x * 1080u) / 4096u : raw_x;
++				unsigned py = raw_y > 2399u ? (raw_y * 2400u) / 4096u : raw_y;
++				if (px > 1079u) px = 1079u;
++				if (py > 2399u) py = 2399u;
++
++				if (tchsta == SEC_TS_COORDINATE_ACTION_PRESS ||
++				    tchsta == SEC_TS_COORDINATE_ACTION_MOVE) {
++					mask |= (1u << id);
++					x[id] = (int)px;
++					y[id] = (int)py;
++				} else if (tchsta == SEC_TS_COORDINATE_ACTION_RELEASE) {
++					mask &= ~(1u << id);
 +				}
 +			}
 +		} else if (eid == SEC_TS_STATUS_EVENT) {
 +			uint8_t stype = (buf[0] >> 2) & 0x0fu;
-+			if (stype == 1u) { /* ERR event: clear event stack */
++			if (stype == 1u) { /* ERR event */
 +				const uint8_t cmd_clear = SEC_TS_CMD_CLEAR_EVENT_STACK;
 +				(void)touch_msg(SEC_TS_I2C_ADDR, &cmd_clear, 1, NULL, 0, false);
 +				mask = 0;
@@ -126,7 +181,7 @@ index 03defe6..8c20831 100644
  static bool
  touch_se_init(void)
  {
-@@ -495,7 +582,7 @@ touch_se_init(void)
+@@ -495,7 +636,7 @@ touch_se_init(void)
  	printf("SWEET TOUCH: se7 fw=%#x proto=%u status=%#x tx=%#x rx=%#x ios=%#x\n",
  	    fw, (fw >> 8) & 0xffu, touch_rd(st.se, SE_STATUS), tx, rx,
  	    touch_rd(st.se, 0x908));
@@ -135,7 +190,7 @@ index 03defe6..8c20831 100644
  	    ((tx >> 24) & 0x3fu) != 32u || ((rx >> 24) & 0x3fu) != 32u ||
  	    ((tx >> 16) & 0x3fu) < 2u || ((rx >> 16) & 0x3fu) < 2u) {
  		printf("SWEET TOUCH: need ABL-loaded I2C firmware and 32-bit FIFOs; probes skipped\n");
-@@ -548,7 +635,7 @@ touch_se_init(void)
+@@ -548,7 +689,7 @@ touch_se_init(void)
  static void
  touch_thread(void *arg, wait_result_t result)
  {
@@ -144,7 +199,7 @@ index 03defe6..8c20831 100644
  	(void)arg;
  	(void)result;
  	/*
-@@ -561,6 +648,7 @@ touch_thread(void *arg, wait_result_t result)
+@@ -561,6 +702,7 @@ touch_thread(void *arg, wait_result_t result)
  	printf("SWEET TOUCH: mapping GCC/TLMM/SE7\n");
  	st.gcc = ml_io_map(TOUCH_GCC_PA, 0x60000);
  	st.gpio = ml_io_map(TOUCH_NORTH_PA, 0x5b000);
@@ -152,33 +207,66 @@ index 03defe6..8c20831 100644
  	st.se = ml_io_map(TOUCH_SE_PA, 0x4000);
  	if (!st.gcc || !st.gpio || !st.se) {
  		printf("SWEET TOUCH: MMIO mapping failed\n");
-@@ -577,10 +665,11 @@ touch_thread(void *arg, wait_result_t result)
- 	touch_gpio(8, 0, 3, 3, true, false);
+@@ -574,15 +716,28 @@ touch_thread(void *arg, wait_result_t result)
+ 	printf("SWEET TOUCH: TLMM reset=%#x irq=%#x vdd90=%#x; voting L11C through RPMh\n",
+ 	    touch_rd(st.gpio, TOUCH_GPIO_IO(8)), touch_rd(st.gpio, TOUCH_GPIO_IO(9)),
+ 	    touch_rd(st.gpio, TOUCH_GPIO_IO(90)));
+-	/* Keep the IC in reset while its rails settle; IRQ stays an input. */
+-	touch_gpio(9, 0, 3, 3, false, false); /* IRQ input, 8 mA, pull-up */
+-	touch_gpio(8, 0, 3, 3, true, false);
  	int power_error = sweet_rpmh_vreg_enable("ldoc11", 3200);
  	if (power_error) {
 -		printf("SWEET TOUCH: L11C RPMh enable failed %d; probes skipped\n", power_error);
 -		goto out;
 +		printf("SWEET TOUCH: L11C RPMh enable returned %d; continuing\n", power_error);
  	}
- 	touch_gpio(90, 0, 0, 0, true, true); /* board digital power enable */
+-	touch_gpio(90, 0, 0, 0, true, true); /* board digital power enable */
+-	touch_wait(10); /* conservative rail settling; not a DT timing value */
+-	touch_gpio(6, 1, 0, 0, false, false); /* qup11 SDA/SCL, 2 mA */
+-	touch_gpio(7, 1, 0, 0, false, false);
+-	/* Vendor GT9896 dev_confirm: reset low 2 ms, then high. */
+-	touch_gpio(8, 0, 3, 3, true, false);
+-	touch_wait(2);
+-	touch_gpio(8, 0, 3, 3, true, true);
+-	touch_wait(300); /* exceeds vendor 5 ms test + 95 ms post-test wait */
 +	/* Samsung Galaxy A71 tsp_ldo_avdd / tsp_ldo_en is on GPIO 56 (WEST tile) */
 +	touch_gpio_west(56, 0, 0, 0, true, true);
- 	touch_wait(10); /* conservative rail settling; not a DT timing value */
- 	touch_gpio(6, 1, 0, 0, false, false); /* qup11 SDA/SCL, 2 mA */
- 	touch_gpio(7, 1, 0, 0, false, false);
-@@ -599,23 +688,56 @@ touch_thread(void *arg, wait_result_t result)
++	printf("SWEET TOUCH: GPIO56 (AVDD) cfg=%#x io=%#x\n",
++	    st.gpio_west ? touch_rd(st.gpio_west, TOUCH_GPIO_CFG(56)) : 0,
++	    st.gpio_west ? touch_rd(st.gpio_west, TOUCH_GPIO_IO(56)) : 0);
++
++	/* Samsung Galaxy A71 tsp_int_dvdd_en is on PM6150 GPIO 4 (SPMI) */
++	touch_power_dvdd();
++
++	/* Allow power supplies to settle and IC to finish POR */
++	touch_wait(100);
++
++	/* Configure IRQ (GPIO 9): input, active-low, internal pull-up */
++	touch_gpio(9, 0, 3, 2, false, false);
++
++	/* Configure I2C SDA (GPIO 6) and SCL (GPIO 7): qup11, internal pull-up, 6 mA */
++	touch_gpio(6, 1, 3, 2, false, false);
++	touch_gpio(7, 1, 3, 2, false, false);
++
++	/* Diagnostic: check physical line levels (1 = idle high) */
++	printf("SWEET TOUCH: bus pins SDA(6)=%u SCL(7)=%u IRQ(9)=%u\n",
++	    touch_rd(st.gpio, TOUCH_GPIO_IO(6)) & 1u,
++	    touch_rd(st.gpio, TOUCH_GPIO_IO(7)) & 1u,
++	    touch_rd(st.gpio, TOUCH_GPIO_IO(9)) & 1u);
+@@ -599,23 +754,58 @@ touch_thread(void *arg, wait_result_t result)
  	int fe2 = touch_read(0x38, 0x9f, false, &fid2, 1);
  	printf("SWEET TOUCH: probe 0x38 err=%d/%d chip-id=%02x:%02x irq=%#x\n",
  	    fe1, fe2, fid1, fid2, st.irq_status);
-+	uint8_t sid[4] = {0};
-+	int se_id = touch_read(SEC_TS_I2C_ADDR, SEC_TS_READ_ID, false, sid, 3);
-+	printf("SWEET TOUCH: probe 0x48 (sec_ts) err=%d id=%02x %02x %02x irq=%#x\n",
-+	    se_id, sid[0], sid[1], sid[2], st.irq_status);
++	uint8_t sid[6] = {0};
++	int se_id = touch_read(SEC_TS_I2C_ADDR, SEC_TS_READ_ID, false, sid, 5);
++	printf("SWEET TOUCH: probe 0x48 (sec_ts ID) err=%d id='%c%c%c%c' (%02x %02x %02x %02x %02x) irq=%#x\n",
++	    se_id, sid[0] ? sid[0] : '?', sid[1] ? sid[1] : '?', sid[2] ? sid[2] : '?', sid[3] ? sid[3] : '?',
++	    sid[0], sid[1], sid[2], sid[3], sid[4], st.irq_status);
 +	bool sec_ts = !se_id;
 +	if (!sec_ts) {
-+		uint8_t se_ev[16] = {0};
++		uint8_t se_ev[8] = {0};
 +		int se_ev_err = touch_read(SEC_TS_I2C_ADDR, SEC_TS_READ_ONE_EVENT, false, se_ev, sizeof(se_ev));
-+		printf("SWEET TOUCH: probe 0x48 (one_event) err=%d ev0=%02x\n", se_ev_err, se_ev[0]);
++		printf("SWEET TOUCH: probe 0x48 (one_event) err=%d ev0=%02x ev1=%02x\n", se_ev_err, se_ev[0], se_ev[1]);
 +		sec_ts = !se_ev_err;
 +	}
 +	uint8_t im_id[4] = {0};
@@ -202,6 +290,7 @@ index 03defe6..8c20831 100644
 +		const uint8_t cmd_sense = SEC_TS_CMD_SENSE_ON;
 +		const uint8_t cmd_clear = SEC_TS_CMD_CLEAR_EVENT_STACK;
 +		(void)touch_msg(SEC_TS_I2C_ADDR, &cmd_sense, 1, NULL, 0, false);
++		touch_wait(10);
 +		(void)touch_msg(SEC_TS_I2C_ADDR, &cmd_clear, 1, NULL, 0, false);
 +	} else if (goodix) {
 +		st.kind = TOUCH_GOODIX;
@@ -215,7 +304,9 @@ index 03defe6..8c20831 100644
  	unsigned errors = 0, ticks = 0;
  	while (!st.dead) {
  		/* Optional IRQ hint still reads every 100ms, and always while down. */
- 		if (!st.irq_hint || st.active || !(touch_rd(st.gpio, TOUCH_GPIO_IO(9)) & 1u) ||
+-		if (!st.irq_hint || st.active || !(touch_rd(st.gpio, TOUCH_GPIO_IO(9)) & 1u) ||
++		bool irq_active = !(touch_rd(st.gpio, TOUCH_GPIO_IO(9)) & 1u);
++		if (!st.irq_hint || st.active || irq_active ||
  		    (++ticks % 10u) == 0) {
 -			int err = st.kind == TOUCH_GOODIX ? touch_goodix() : touch_focaltech();
 +			int err;
