@@ -51,6 +51,8 @@ jobs:
           # libfirehose_kernel is built arm64e-only; the SWEET kernel is plain arm64
           sed -i '' 's/ARCHS="x86_64 arm64e" VALID_ARCHS="x86_64 arm64e"/ARCHS="x86_64 arm64e arm64" VALID_ARCHS="x86_64 arm64e arm64"/' dxb/build.sh
           grep -c 'VALID_ARCHS="x86_64 arm64e arm64"' dxb/build.sh
+          # Fail immediately if any custom patch fails to apply
+          sed -i '' 's/warning "Skipping patch \${PATCH}/if [[ "\$PATCH" == *00* ]]; then echo "ERROR: \$PATCH failed: \$APPLY_CHECK" >&2; exit 1; fi; warning "Skipping patch \${PATCH}/' dxb/build.sh
           ls dxb/patches
 
       - name: Deps
@@ -115,6 +117,10 @@ jobs:
           cp -R dxb/fakeroot/System/Library/Kernels/. out/ 2>/dev/null || true
           ls -la out
           (cd out && shasum -a 256 kernel.* > SHA256SUMS) || true
+
+      - name: Verify SEC_TS driver in built kernel
+        run: |
+          strings out/kernel.development.sweet | grep "Samsung S6SY771"
 
       - uses: actions/upload-artifact@v4
         if: always()
