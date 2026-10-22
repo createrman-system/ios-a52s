@@ -1,0 +1,214 @@
+diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
+--- a/bsd/dev/sweet_touch.c
++++ b/bsd/dev/sweet_touch.c
+@@ -88,7 +88,7 @@
+ static struct {
+ 	vm_offset_t se, gcc, gpio, gpio_west;
+ 	bool started, dead, probing;
+-	int kind, irq_hint;
++	int kind, irq_hint, bitbang;
+ 	uint32_t irq_status, irq_last, active;
+ 	unsigned sent, got;
+ 	int x[TOUCH_MAX], y[TOUCH_MAX];
+@@ -145,6 +145,104 @@
+ 	cfg &= ~0x3ffu;
+ 	cfg |= (mux << 2) | pull | (drive << 6) | (out ? 0x200u : 0u);
+ 	touch_wr(st.gpio, off, cfg);
++}
++
++/* Open-drain software I2C: drive LOW or release, never drive HIGH.
++ * Opt in with sweettouchbitbang=1 while diagnosing a GENI FIFO/GSI mismatch.
++ * GPIO6/7 belong to TLMM NORTH on sdmmagpie (not sm6150).
++ */
++static void
++touch_bb_line(unsigned pin, bool release)
++{
++	touch_gpio(pin, 0, 3, 0, !release, false);
++	delay(5);
++}
++
++static int
++touch_bb_clock(void)
++{
++	touch_bb_line(7, true);
++	for (unsigned i = 0; i < 1000; ++i) {
++		if (touch_rd(st.gpio, TOUCH_GPIO_IO(7)) & 1u) {
++			return 0;
++		}
++		delay(1);
++	}
++	return ETIMEDOUT;
++}
++
++static int
++touch_bb_stop(void)
++{
++	touch_bb_line(7, false);
++	touch_bb_line(6, false);
++	int err = touch_bb_clock();
++	touch_bb_line(6, true);
++	return err;
++}
++
++static int
++touch_bb_start(void)
++{
++	touch_bb_line(6, true);
++	int err = touch_bb_clock();
++	if (err) return err;
++	if (!(touch_rd(st.gpio, TOUCH_GPIO_IO(6)) & 1u)) return EBUSY;
++	touch_bb_line(6, false);
++	touch_bb_line(7, false);
++	return 0;
++}
++
++static int
++touch_bb_write(uint8_t value)
++{
++	for (unsigned i = 0; i < 8; ++i) {
++		touch_bb_line(6, (value & 0x80u) != 0);
++		int err = touch_bb_clock();
++		if (err) return err;
++		touch_bb_line(7, false);
++		value <<= 1;
++	}
++	touch_bb_line(6, true);
++	int err = touch_bb_clock();
++	if (err) return err;
++	bool nack = (touch_rd(st.gpio, TOUCH_GPIO_IO(6)) & 1u) != 0;
++	touch_bb_line(7, false);
++	return nack ? ENXIO : 0;
++}
++
++static int
++touch_bb_read(uint8_t *value, bool last)
++{
++	*value = 0;
++	touch_bb_line(6, true);
++	for (unsigned i = 0; i < 8; ++i) {
++		int err = touch_bb_clock();
++		if (err) return err;
++		*value = (uint8_t)((*value << 1) |
++		    (touch_rd(st.gpio, TOUCH_GPIO_IO(6)) & 1u));
++		touch_bb_line(7, false);
++	}
++	touch_bb_line(6, last); /* NACK final byte, ACK all preceding bytes. */
++	int err = touch_bb_clock();
++	touch_bb_line(7, false);
++	touch_bb_line(6, true);
++	return err;
++}
++
++static int
++touch_bb_msg(uint8_t addr, const uint8_t *tx, unsigned nt, uint8_t *rx,
++    unsigned nr, bool stretch)
++{
++	int err = touch_bb_start();
++	if (!err) err = touch_bb_write((uint8_t)((addr << 1) | (nr ? 1u : 0u)));
++	for (unsigned i = 0; !err && i < nt; ++i) err = touch_bb_write(tx[i]);
++	for (unsigned i = 0; !err && i < nr; ++i) err = touch_bb_read(&rx[i], i + 1 == nr);
++	if (err || !stretch) {
++		int stop_err = touch_bb_stop();
++		if (!err) err = stop_err;
++	}
++	return err;
+ }
+ 
+ static void
+@@ -300,6 +398,9 @@
+ 	if (st.dead || nt > 3 || nr > 90 || (nt && nr) || (!nt && !nr)) {
+ 		return EIO;
+ 	}
++	if (st.bitbang) {
++		return touch_bb_msg(addr, tx, nt, rx, nr, stretch);
++	}
+ 	if (!touch_wait_clear(st.se, SE_STATUS, 1u)) {
+ 		st.dead = true; /* no other SE7 owner is supported */
+ 		return EBUSY;
+@@ -598,8 +699,8 @@
+ 				unsigned id = tid - 1u;
+ 				unsigned raw_x = ((unsigned)buf[1] << 4) | ((buf[3] >> 4) & 0x0fu);
+ 				unsigned raw_y = ((unsigned)buf[2] << 4) | (buf[3] & 0x0fu);
+-				unsigned px = raw_x > 1079u ? (raw_x * 1080u) / 4096u : raw_x;
+-				unsigned py = raw_y > 2399u ? (raw_y * 2400u) / 4096u : raw_y;
++				unsigned px = (raw_x * 1079u) / 4095u;
++				unsigned py = (raw_y * 2399u) / 4095u;
+ 				if (px > 1079u) px = 1079u;
+ 				if (py > 2399u) py = 2399u;
+ 
+@@ -612,6 +713,8 @@
+ 					mask &= ~(1u << id);
+ 				}
+ 			}
++			/* Preserve a press followed by release in the same FIFO batch. */
++			touch_report(mask, x, y);
+ 		} else if (eid == SEC_TS_STATUS_EVENT) {
+ 			uint8_t stype = (buf[0] >> 2) & 0x0fu;
+ 			if (stype == 1u) { /* ERR event */
+@@ -709,7 +812,8 @@
+ 		printf("SWEET TOUCH: MMIO mapping failed\n");
+ 		goto out;
+ 	}
+-	if (!touch_clocks() || !touch_se_init()) {
++	(void)PE_parse_boot_argn("sweettouchbitbang", &st.bitbang, sizeof(st.bitbang));
++	if (!st.bitbang && (!touch_clocks() || !touch_se_init())) {
+ 		goto out;
+ 	}
+ 	printf("SWEET TOUCH: TLMM reset=%#x irq=%#x vdd90=%#x; voting L11C through RPMh\n",
+@@ -750,6 +854,15 @@
+ 	    touch_rd(st.gpio, TOUCH_GPIO_IO(7)) & 1u,
+ 	    touch_rd(st.gpio, TOUCH_GPIO_IO(8)) & 1u,
+ 	    touch_rd(st.gpio, TOUCH_GPIO_IO(9)) & 1u);
++	if (st.bitbang) {
++		touch_bb_line(6, true);
++		touch_bb_line(7, true);
++		printf("SWEET TOUCH: GPIO I2C idle SDA=%u SCL=%u\n",
++		    touch_rd(st.gpio, TOUCH_GPIO_IO(6)) & 1u,
++		    touch_rd(st.gpio, TOUCH_GPIO_IO(7)) & 1u);
++	} else {
++		printf("SWEET TOUCH: GENI FIFO_IF_DISABLE_RO=%#x\n", touch_rd(st.se, 0x64));
++	}
+ 	uint8_t gid[32], legacy[32], fid1 = 0, fid2 = 0;
+ 	st.probing = true;
+ 	int ge = touch_probe_info(GOODIX_PID_REG, gid);
+@@ -760,7 +873,7 @@
+ 	int fe2 = touch_read(0x38, 0x9f, false, &fid2, 1);
+ 	printf("SWEET TOUCH: probe 0x38 err=%d/%d chip-id=%02x:%02x irq=%#x\n",
+ 	    fe1, fe2, fid1, fid2, st.irq_status);
+-	uint8_t se_ev[8] = {0};
++	uint8_t se_ev[SEC_TS_EVENT_BUFF_SIZE] = {0};
+ 	int se_ev_err = touch_read(SEC_TS_I2C_ADDR, SEC_TS_READ_ONE_EVENT, false, se_ev, sizeof(se_ev));
+ 	printf("SWEET TOUCH: probe 0x48 (one_event) err=%d ev0=%02x ev1=%02x\n", se_ev_err, se_ev[0], se_ev[1]);
+ 	uint8_t sid[6] = {0};
+@@ -775,7 +888,8 @@
+ 	st.probing = false;
+ 	bool goodix = !ge && gid[0] == '9' && gid[1] == '8' && gid[2] == '9' && gid[3] == '6';
+ 	bool fts = !fe1 && !fe2 && fid1 == 0x54 && fid2 == 0x52;
+-	bool sec_ts = !se_id || !se_ev_err;
++	bool sec_ts = !se_id && sid[0] == 0x53 && sid[1] == 0x45 &&
++	    sid[2] == 0x37 && sid[3] == 0x71; /* A71 identity observed in TWRP. */
+ 	if (st.dead || (!goodix && !fts && !sec_ts)) {
+ 		printf("SWEET TOUCH: no supported IC (goodix=%d fts=%d sec_ts=%d dead=%d); stopping\n",
+ 		    goodix, fts, sec_ts, st.dead);
+@@ -783,9 +897,20 @@
+ 	}
+ 	if (sec_ts) {
+ 		st.kind = TOUCH_SEC_TS;
++		/* Match y771 sec_ts_probe: TOUCH | PALM | WET, then SENSE_ON. */
++		const uint8_t functions[3] = {0x30, 0x61, 0x00};
++		int init_err = touch_msg(SEC_TS_I2C_ADDR, functions, 3, NULL, 0, false);
++		if (init_err) {
++			printf("SWEET TOUCH: set touch functions failed %d\n", init_err);
++			goto out;
++		}
+ 		const uint8_t cmd_sense = SEC_TS_CMD_SENSE_ON;
+ 		const uint8_t cmd_clear = SEC_TS_CMD_CLEAR_EVENT_STACK;
+-		(void)touch_msg(SEC_TS_I2C_ADDR, &cmd_sense, 1, NULL, 0, false);
++		init_err = touch_msg(SEC_TS_I2C_ADDR, &cmd_sense, 1, NULL, 0, false);
++		if (init_err) {
++			printf("SWEET TOUCH: sense on failed %d\n", init_err);
++			goto out;
++		}
+ 		touch_wait(10);
+ 		(void)touch_msg(SEC_TS_I2C_ADDR, &cmd_clear, 1, NULL, 0, false);
+ 	} else if (goodix) {

@@ -1,0 +1,146 @@
+diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
+--- a/bsd/dev/sweet_touch.c
++++ b/bsd/dev/sweet_touch.c
+@@ -262,56 +262,90 @@
+ 	touch_wr(st.gpio_west, off, cfg);
+ }
+ 
+-static void
++/* PM6150 GPIO4 is peripheral 0xc3 on SID0. REG_DIG_OUT_CTL (0x45)
++ * controls drive strength, not output value. Match pinctrl-spmi-gpio.c:
++ * LV/MV output value is 0x44 bit7 and direction is 0x40 bits1:0.
++ */
++static bool
++touch_dvdd_read(vm_offset_t obs, uint32_t lane, uint8_t reg, uint8_t *value)
++{
++	touch_wr(obs, lane, (1u << 27) | ((uint32_t)reg << 4));
++	for (unsigned i = 0; i < 1000; ++i) {
++		uint32_t status = touch_rd(obs, lane + 8);
++		if (status & 1u) {
++			if (status & 0xeu) return false;
++			*value = (uint8_t)touch_rd(obs, lane + 0x18);
++			return true;
++		}
++		delay(1);
++	}
++	return false;
++}
++
++static bool
++touch_dvdd_write(vm_offset_t channel, uint8_t reg, uint8_t value)
++{
++	touch_wr(channel, 0x10, value);
++	touch_wr(channel, 0, (uint32_t)reg << 4);
++	for (unsigned i = 0; i < 1000; ++i) {
++		uint32_t status = touch_rd(channel, 8);
++		if (status & 1u) return !(status & 0xeu);
++		delay(1);
++	}
++	return false;
++}
++
++static bool
+ touch_power_dvdd(void)
+ {
+ 	vm_offset_t core = ml_io_map(0x0c440000u, 0x2000);
+ 	vm_offset_t cnfg = ml_io_map(0x0c40a000u, 0x1000);
+-	vm_offset_t obs  = ml_io_map(0x0e600000u, 0x10000);
+-	if (!core || !cnfg || !obs) {
+-		printf("SWEET TOUCH: SPMI map failed\n");
+-		return;
+-	}
++	vm_offset_t obs = ml_io_map(0x0e600000u, 0x10000);
++	if (!core || !cnfg || !obs) return false;
+ 	uint32_t count = touch_rd(core, 4) & 0x7ffu;
++	if (count > 512u) return false;
+ 	uint16_t apid = 0xffffu;
+ 	for (uint32_t i = 0; i < count; ++i) {
+ 		uint32_t map = touch_rd(core, 0x900u + 4u * i);
+-		if (((map >> 8) & 0xfffu) == 0x0c3u) {
+-			uint32_t owner = touch_rd(cnfg, 0x700u + 4u * i) & 7u;
+-			if (apid == 0xffffu || owner == 0) {
+-				apid = (uint16_t)i;
+-			}
++		uint32_t owner = touch_rd(cnfg, 0x700u + 4u * i) & 7u;
++		if (((map >> 8) & 0xfffu) == 0x0c3u && owner == 0) {
++			apid = (uint16_t)i;
++			break;
+ 		}
+ 	}
+ 	if (apid == 0xffffu) {
+-		printf("SWEET TOUCH: PM6150 GPIO4 APID not found\n");
+-		return;
+-	}
+-	uint32_t obs_off = 0x80u * apid;
+-	uint8_t en = 0, out = 0;
+-	touch_wr(obs, obs_off, (1u << 27) | (0x46u << 4));
+-	for (int j = 0; j < 500; j++) { if (touch_rd(obs, obs_off + 8) & 1u) { en = (uint8_t)touch_rd(obs, obs_off + 0x18); break; } delay(1); }
+-	touch_wr(obs, obs_off, (1u << 27) | (0x45u << 4));
+-	for (int j = 0; j < 500; j++) { if (touch_rd(obs, obs_off + 8) & 1u) { out = (uint8_t)touch_rd(obs, obs_off + 0x18); break; } delay(1); }
+-	printf("SWEET TOUCH: PM6150 GPIO4 apid=%u init en=%#x out=%#x\n", apid, en, out);
+-
+-	vm_offset_t chnl = ml_io_map(0x0c600000u + 0x10000u * (vm_offset_t)apid, 0x1000);
+-	if (chnl) {
+-		touch_wr(chnl, 0x10, 1u);
+-		touch_wr(chnl, 0x00, (0u << 27) | (0x45u << 4) | 0u);
+-		for (int j = 0; j < 500; j++) { if (touch_rd(chnl, 8) & 1u) break; delay(1); }
+-		touch_wr(chnl, 0x10, 1u);
+-		touch_wr(chnl, 0x00, (0u << 27) | (0x40u << 4) | 0u);
+-		for (int j = 0; j < 500; j++) { if (touch_rd(chnl, 8) & 1u) break; delay(1); }
+-		touch_wr(chnl, 0x10, 0x80u);
+-		touch_wr(chnl, 0x00, (0u << 27) | (0x46u << 4) | 0u);
+-		for (int j = 0; j < 500; j++) { if (touch_rd(chnl, 8) & 1u) break; delay(1); }
+-		touch_wr(obs, obs_off, (1u << 27) | (0x46u << 4));
+-		for (int j = 0; j < 500; j++) { if (touch_rd(obs, obs_off + 8) & 1u) { en = (uint8_t)touch_rd(obs, obs_off + 0x18); break; } delay(1); }
+-		touch_wr(obs, obs_off, (1u << 27) | (0x45u << 4));
+-		for (int j = 0; j < 500; j++) { if (touch_rd(obs, obs_off + 8) & 1u) { out = (uint8_t)touch_rd(obs, obs_off + 0x18); break; } delay(1); }
+-		printf("SWEET TOUCH: PM6150 GPIO4 DVDD active en=%#x out=%#x\n", en, out);
+-	}
++		printf("SWEET TOUCH: GPIO4 has no AP-owned SPMI lane\n");
++		return false;
++	}
++	uint32_t lane = 0x80u * apid;
++	uint8_t subtype, old_mode, old_source, old_en;
++	if (!touch_dvdd_read(obs, lane, 0x05, &subtype) ||
++	    !touch_dvdd_read(obs, lane, 0x40, &old_mode) ||
++	    !touch_dvdd_read(obs, lane, 0x44, &old_source) ||
++	    !touch_dvdd_read(obs, lane, 0x46, &old_en)) return false;
++	printf("SWEET TOUCH: GPIO4 subtype=%#x mode=%#x source=%#x en=%#x apid=%u\n",
++	    subtype, old_mode, old_source, old_en, apid);
++	bool lv_mv = subtype == 0x10u || subtype == 0x11u;
++	if (!lv_mv && subtype != 1u && subtype != 5u && subtype != 9u && subtype != 13u) {
++		printf("SWEET TOUCH: unsupported PMIC GPIO subtype; no writes\n");
++		return false;
++	}
++	vm_offset_t channel = ml_io_map(0x0c600000u + 0x10000u * (vm_offset_t)apid, 0x1000);
++	if (!channel) return false;
++	uint8_t mode = lv_mv ? 1u : 0x11u;
++	/* VIN0 comes from A71's tsp_int_dvdd_en power-source property. */
++	if (!touch_dvdd_write(channel, 0x41, 0) ||
++	    (lv_mv && !touch_dvdd_write(channel, 0x44, 0x80)) ||
++	    !touch_dvdd_write(channel, 0x40, mode) ||
++	    !touch_dvdd_write(channel, 0x46, 0x80)) return false;
++	uint8_t actual_mode, actual_source, actual_en;
++	if (!touch_dvdd_read(obs, lane, 0x40, &actual_mode) ||
++	    !touch_dvdd_read(obs, lane, 0x44, &actual_source) ||
++	    !touch_dvdd_read(obs, lane, 0x46, &actual_en)) return false;
++	printf("SWEET TOUCH: GPIO4 DVDD readback mode=%#x source=%#x en=%#x\n",
++	    actual_mode, actual_source, actual_en);
++	return actual_mode == mode && (!lv_mv || actual_source == 0x80u) &&
++	       (actual_en & 0x80u);
+ }
+ 
+ static bool
+@@ -830,7 +864,11 @@
+ 	    st.gpio_west ? touch_rd(st.gpio_west, TOUCH_GPIO_IO(56)) : 0);
+ 
+ 	/* Samsung Galaxy A71 tsp_int_dvdd_en is on PM6150 GPIO 4 (SPMI) */
+-	touch_power_dvdd();
++	if (!touch_power_dvdd()) {
++		printf("SWEET TOUCH: DVDD configuration failed; stopping\n");
++		goto out;
++	}
++	touch_wait(80);
+ 
+ 	/* Samsung Galaxy A71 Touch Reset is on GPIO 8 (NORTH tile, active-low).
+ 	 * Pulse reset LOW for 10 ms, then drive HIGH (release reset) with pull-up & 8 mA drive */

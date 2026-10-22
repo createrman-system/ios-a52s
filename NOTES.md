@@ -1,3 +1,37 @@
+## A71 handoff 2026-10-22 (local investigation)
+
+Owner requested moving touch candidates 0083/0084 to main without a build.
+Transfer uses a single `[skip ci]` commit; the test-branch workflow-trigger
+change is excluded. Hardware validation of 0084 is still outstanding.
+
+Latest test: owner booted GPIO candidate. Persistent log flush 11, total
+204170 bytes: `GPIO I2C idle SDA=0 SCL=0`; all probes timeout. Thus GPIO
+bypass was active but did not restore transport. Prior GENI test confirmed
+`FIFO_IF_DISABLE_RO=1`. CI 39846695301 succeeded at aa2d994.
+
+Candidate 0084 fixes an independent, source-confirmed bug in inherited 0082:
+PMIC GPIO register 0x45 is drive strength, not output value; mode 0 is input.
+New code selects output mode and high value using subtype-specific Linux
+pinctrl-spmi-gpio semantics, checks AP ownership, SPMI completion/errors and
+register readback. Actual handset subtype not yet read; code detects it.
+Do not claim this is the confirmed cause of stuck SDA/SCL. Local mocked SPMI
+tests compile with warnings-as-errors and ASan/UBSan and pass for LV/MV,
+legacy, wrong owner, unsupported subtype and bus error. No flash performed.
+Recovery disconnected while reading its debug GPIO dump after mounting
+debugfs, then returned; avoid full debugfs GPIO/register dumps on this device.
+
+Update: candidate commit `a9a2513` pushed to `fix/a71-touch-gpio-i2c` using
+existing Git authentication at the owner's request. The workflow now includes
+this branch in its push trigger so the candidate can build without merging.
+Build status and hardware result remain unverified. No partition writes.
+
+Read `docs/a71-touch-2026-10-22.md` first. TWRP confirms y771 at 0x48 and
+4095x4095 raw coordinates. Previous XNU log: all I2C probes time out (err=60),
+no IC selected. Candidate 0083 adds opt-in GPIO I2C (`sweettouchbitbang=1`),
+fixes scaling and short-tap batching, and checks initialization. Protocol and
+decoder tests pass locally. No full XNU build or handset test yet. No partition
+writes, reboot, CI run or push. GENI/GSI mode is a hypothesis needing a log.
+
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
 ## Agent handoff / active work (2026-10-15, latest)
