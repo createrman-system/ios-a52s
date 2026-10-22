@@ -1,5 +1,5 @@
 diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
-index 03defe6..a9c6104 100644
+index 03defe6..65c9c88 100644
 --- a/bsd/dev/sweet_touch.c
 +++ b/bsd/dev/sweet_touch.c
 @@ -25,6 +25,7 @@ void sweet_touch_init(void);
@@ -207,7 +207,7 @@ index 03defe6..a9c6104 100644
  	st.se = ml_io_map(TOUCH_SE_PA, 0x4000);
  	if (!st.gcc || !st.gpio || !st.se) {
  		printf("SWEET TOUCH: MMIO mapping failed\n");
-@@ -572,23 +715,34 @@ touch_thread(void *arg, wait_result_t result)
+@@ -572,23 +715,41 @@ touch_thread(void *arg, wait_result_t result)
  	printf("SWEET TOUCH: TLMM reset=%#x irq=%#x vdd90=%#x; voting L11C through RPMh\n",
  	    touch_rd(st.gpio, TOUCH_GPIO_IO(8)), touch_rd(st.gpio, TOUCH_GPIO_IO(9)),
  	    touch_rd(st.gpio, TOUCH_GPIO_IO(90)));
@@ -225,10 +225,6 @@ index 03defe6..a9c6104 100644
 -	touch_gpio(6, 1, 0, 0, false, false); /* qup11 SDA/SCL, 2 mA */
 -	touch_gpio(7, 1, 0, 0, false, false);
 -	/* Vendor GT9896 dev_confirm: reset low 2 ms, then high. */
--	touch_gpio(8, 0, 3, 3, true, false);
--	touch_wait(2);
--	touch_gpio(8, 0, 3, 3, true, true);
--	touch_wait(300); /* exceeds vendor 5 ms test + 95 ms post-test wait */
 +	/* Samsung Galaxy A71 tsp_ldo_avdd / tsp_ldo_en is on GPIO 56 (WEST tile) */
 +	touch_gpio_west(56, 0, 0, 0, true, true);
 +	printf("SWEET TOUCH: GPIO56 (AVDD) cfg=%#x io=%#x\n",
@@ -238,40 +234,45 @@ index 03defe6..a9c6104 100644
 +	/* Samsung Galaxy A71 tsp_int_dvdd_en is on PM6150 GPIO 4 (SPMI) */
 +	touch_power_dvdd();
 +
-+	/* Allow power supplies to settle and IC to finish POR */
-+	touch_wait(100);
++	/* Samsung Galaxy A71 Touch Reset is on GPIO 8 (NORTH tile, active-low).
++	 * Pulse reset LOW for 10 ms, then drive HIGH (release reset) with pull-up & 8 mA drive */
+ 	touch_gpio(8, 0, 3, 3, true, false);
+-	touch_wait(2);
++	touch_wait(10);
+ 	touch_gpio(8, 0, 3, 3, true, true);
+-	touch_wait(300); /* exceeds vendor 5 ms test + 95 ms post-test wait */
 +
-+	/* Configure IRQ (GPIO 9): input, active-low, internal pull-up */
-+	touch_gpio(9, 0, 3, 2, false, false);
++	/* Configure IRQ (GPIO 9): input, active-low, internal pull-up, 8 mA drive */
++	touch_gpio(9, 0, 3, 3, false, false);
 +
 +	/* Configure I2C SDA (GPIO 6) and SCL (GPIO 7): qup11, internal pull-up, 6 mA */
 +	touch_gpio(6, 1, 3, 2, false, false);
 +	touch_gpio(7, 1, 3, 2, false, false);
 +
++	/* Allow S6SY771 IC firmware to boot (Linux kernel waits 70 ms) */
++	touch_wait(80);
++
 +	/* Diagnostic: check physical line levels (1 = idle high) */
-+	printf("SWEET TOUCH: bus pins SDA(6)=%u SCL(7)=%u IRQ(9)=%u\n",
++	printf("SWEET TOUCH: bus pins SDA(6)=%u SCL(7)=%u RST(8)=%u IRQ(9)=%u\n",
 +	    touch_rd(st.gpio, TOUCH_GPIO_IO(6)) & 1u,
 +	    touch_rd(st.gpio, TOUCH_GPIO_IO(7)) & 1u,
++	    touch_rd(st.gpio, TOUCH_GPIO_IO(8)) & 1u,
 +	    touch_rd(st.gpio, TOUCH_GPIO_IO(9)) & 1u);
  	uint8_t gid[32], legacy[32], fid1 = 0, fid2 = 0;
  	st.probing = true;
  	int ge = touch_probe_info(GOODIX_PID_REG, gid);
-@@ -599,23 +753,59 @@ touch_thread(void *arg, wait_result_t result)
+@@ -599,23 +760,56 @@ touch_thread(void *arg, wait_result_t result)
  	int fe2 = touch_read(0x38, 0x9f, false, &fid2, 1);
  	printf("SWEET TOUCH: probe 0x38 err=%d/%d chip-id=%02x:%02x irq=%#x\n",
  	    fe1, fe2, fid1, fid2, st.irq_status);
++	uint8_t se_ev[8] = {0};
++	int se_ev_err = touch_read(SEC_TS_I2C_ADDR, SEC_TS_READ_ONE_EVENT, false, se_ev, sizeof(se_ev));
++	printf("SWEET TOUCH: probe 0x48 (one_event) err=%d ev0=%02x ev1=%02x\n", se_ev_err, se_ev[0], se_ev[1]);
 +	uint8_t sid[6] = {0};
 +	int se_id = touch_read(SEC_TS_I2C_ADDR, SEC_TS_READ_ID, false, sid, 5);
 +	printf("SWEET TOUCH: probe 0x48 (sec_ts ID) err=%d id='%c%c%c%c' (%02x %02x %02x %02x %02x) irq=%#x\n",
 +	    se_id, sid[0] ? sid[0] : '?', sid[1] ? sid[1] : '?', sid[2] ? sid[2] : '?', sid[3] ? sid[3] : '?',
 +	    sid[0], sid[1], sid[2], sid[3], sid[4], st.irq_status);
-+	bool sec_ts = !se_id;
-+	if (!sec_ts) {
-+		uint8_t se_ev[8] = {0};
-+		int se_ev_err = touch_read(SEC_TS_I2C_ADDR, SEC_TS_READ_ONE_EVENT, false, se_ev, sizeof(se_ev));
-+		printf("SWEET TOUCH: probe 0x48 (one_event) err=%d ev0=%02x ev1=%02x\n", se_ev_err, se_ev[0], se_ev[1]);
-+		sec_ts = !se_ev_err;
-+	}
 +	uint8_t im_id[4] = {0};
 +	int im_err = touch_read(0x50, 0x00, false, im_id, 4);
 +	printf("SWEET TOUCH: probe 0x50 (imagis) err=%d id=%02x %02x %02x %02x\n",
@@ -282,6 +283,7 @@ index 03defe6..a9c6104 100644
 -	if (st.dead || goodix == fts) {
 -		printf("SWEET TOUCH: no unique supported IC (goodix=%d fts=%d dead=%d); stopping\n",
 -		    goodix, fts, st.dead);
++	bool sec_ts = !se_id || !se_ev_err;
 +	if (st.dead || (!goodix && !fts && !sec_ts)) {
 +		printf("SWEET TOUCH: no supported IC (goodix=%d fts=%d sec_ts=%d dead=%d); stopping\n",
 +		    goodix, fts, sec_ts, st.dead);
