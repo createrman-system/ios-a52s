@@ -117,9 +117,9 @@ jobs:
           ls -la out
           (cd out && shasum -a 256 kernel.* > SHA256SUMS) || true
 
-      - name: Verify SEC_TS driver in built kernel
+      - name: Verify A52s STM touch driver in built kernel
         run: |
-          strings out/kernel.development.sweet | grep "Samsung S6SY771"
+          strings out/kernel.development.sweet | grep "SWEET TOUCH: A52s GPIO"
 
       - uses: actions/upload-artifact@v4
         if: always()
