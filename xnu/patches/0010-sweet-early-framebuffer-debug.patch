@@ -95,6 +95,25 @@ index ccbb188..777aca4 100644
  	mov		x21, #0
  
 +#if defined(SWEET)
++	/* ABL may enter at EL2. Permit EL1 timer access before XNU writes
++	 * CNTP_CTL_EL0/CNTV_CTL_EL0, then return to the normal entry path. */
++	mrs		x1, CurrentEL
++	and		x1, x1, #0xc
++	cmp		x1, #0x8
++	b.ne	Lsweet_primary_el1
++	mov		x1, #(1 << 31)
++	msr		HCR_EL2, x1
++	mov		x1, #3
++	msr		CNTHCTL_EL2, x1
++	msr		CNTVOFF_EL2, xzr
++	msr		CPTR_EL2, xzr
++	adrp	x1, Lsweet_primary_el1@page
++	add		x1, x1, Lsweet_primary_el1@pageoff
++	msr		ELR_EL2, x1
++	mov		x1, #0x3c5
++	msr		SPSR_EL2, x1
++	eret
++Lsweet_primary_el1:
 +	/* Stage 0: unmistakable green 1080x128 band, before any C/MMU setup. */
 +	MOV64	x0, 0xe1000000
 +	mov		w1, #0xff00ff00

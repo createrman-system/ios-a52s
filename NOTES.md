@@ -596,6 +596,15 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
   before the persistent UFS logger initialized. Next diagnostic enlarges the
   first assembly marker to a bright green 1080x128 band at `0xe1000000`.
 
+- High-memory A52s test reached XNU's panic handler. The photographed fault
+  reports PC `0xfffffe0007491348` and instruction ending `0xd51be228`; the
+  downloaded kernel confirms that instruction is `msr CNTP_CTL_EL0, x8`.
+  This is an EL2 timer-access trap candidate, not a framebuffer or UFS fault.
+  The next patch normalizes a possible EL2 entry for the primary CPU, enables
+  EL1 physical/virtual timer access, clears stage-2/CPTR traps, and erets to
+  EL1h before the existing XNU start path. The high-memory profile remains
+  required because ABL reported non-contiguous low RAM.
+
 - Project target is now `ios-a52s` / `createrman-system/ios-a52s`.
 - The A52s Android/TWRP/kernel sources are present under
   `GalaxyA52sFolders/`; they include SM7325 device and kernel references and
