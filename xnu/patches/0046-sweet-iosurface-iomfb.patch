@@ -991,7 +991,7 @@
 +#endif /* SWEET */
 --- /dev/null
 +++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
-@@ -0,0 +1,455 @@
+@@ -0,0 +1,460 @@
 +/*
 + * Built-in IOMobileFramebuffer for SWEET: the ABL's continuous-splash
 + * framebuffer (1080x2400 a8r8g8b8 in RAM, the panel scans it out by
