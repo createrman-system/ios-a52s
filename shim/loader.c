@@ -124,7 +124,7 @@ const char *loader_boot(uintptr_t dtb)
 	ba->memSize = p->mem_size;
 	ba->topOfKernelData = top;
 	ba->Video.v_baseAddr = FB_BASE;
-	ba->Video.v_display = 1;
+	ba->Video.v_display = 0;	/* 0 = no fbcon clear: XNU won't wipe our debug lines */
 	ba->Video.v_rowBytes = FB_STRIDE;
 	ba->Video.v_width = FB_W;
 	ba->Video.v_height = FB_H;
@@ -138,7 +138,17 @@ const char *loader_boot(uintptr_t dtb)
 
 	uintptr_t entry_pa = p->entry_va + pa_of_va_base;
 	con_hex("JUMP", entry_pa);
-	con_str("XNU", "jumping (fbcon clears screen)");
+	con_str("XNU", "jumping in 2s...");
+
+	/* Spin 2 seconds so the debug lines above stay visible on screen. */
+	{
+		uint64_t freq, t0, t1;
+		__asm__ volatile("mrs %0, cntfrq_el0" : "=r"(freq));
+		__asm__ volatile("isb; mrs %0, cntpct_el0" : "=r"(t0));
+		do {
+			__asm__ volatile("isb; mrs %0, cntpct_el0" : "=r"(t1));
+		} while (t1 - t0 < freq * 2);
+	}
 
 	/* Everything was written with the MMU and caches off; drop any stale I-cache lines too. */
 	__asm__ volatile("dsb sy; ic iallu; dsb sy; isb" ::: "memory");

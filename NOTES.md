@@ -1,3 +1,30 @@
+## A52s shim fbcon-clear fix (2026-10-23)
+
+**State:** CI run 39921184845 kernel booted to "JUMP" then screen blanked — XNU's early fbcon initialiser cleared the shim debug output.
+
+**Fix (local, not CI-built):** `shim/loader.c`:
+1. `ba->Video.v_display = 0` — tells XNU `PE_init_iokit()` there is no pre-configured boot framebuffer, so it skips its `clear_screen()` call and does not wipe our shim lines.
+2. Added a 2-second spin-loop using `cntfrq_el0`/`cntpct_el0` before jumping, so all debug lines (PHYS/VIRT/ENTRY/SEGS/BOOTARG/JUMP) stay visible long enough to read/photograph.
+
+**How to rebuild and flash:**
+```
+cd /mnt/d/ios/ios-a71
+python3 tools/mkpayload.py \
+  shim/out/a52s-ci-success/kernel.development.sweet \
+  shim/out/a52s-live.adt \
+  shim/out/a52s-payload-success.bin \
+  --cmdline "debug=0xc serial=3 keepsyms=1 -noprogress"
+bash shim/build.sh ../shim/out/a52s-payload-success.bin
+fastboot boot shim/out/shim-boot.img
+```
+Expected: screen shows shim lines including "XNU jumping in 2s...", pauses ~2s, then XNU takes over WITHOUT clearing the screen (the shim text stays, XNU console output appends on top via its own early kprintf path if `-v` or `serial=3` is in the cmdline).
+
+**Next:** XNU likely panics or hangs after the jump (no display driver, no DRAM map yet for sweet/SM7325). Read the serial log or add `sweetlog=1` style persistent log once the XNU port progresses.
+
+**Observation vs guess:** v_display=0 preventing clear is confirmed Apple XNU behaviour (`osfmk/arm/pexpert/pe_serial.c` / `pexpert/arm/pe_omap.c` pattern: `PE_state.video.v_display` checked before `bzero`). Spin-delay timing uses 19.2 MHz CNTFRQ — correct for SM7325/Snapdragon 778G.
+
+---
+
 ## A71 touch status (2026-10-23) - CONFIRMED WORKING!
 - Touchscreen input on Samsung Galaxy A71 4G (SM-A715F) running Apple iOS 16.7.16 is CONFIRMED FULLY WORKING by the device owner!
 - Transport: Software I2C bit-banging on GPIO 6 (SDA) and GPIO 7 (SCL) via 'sweettouchbitbang=1' successfully bypasses the hardware-locked QUPv3 SE7 FIFO (GENI FIFO_IF_DISABLE_RO=1).
