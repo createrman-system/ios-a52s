@@ -1,3 +1,10 @@
+## A71 touch status (2026-10-23) - CONFIRMED WORKING!
+- Touchscreen input on Samsung Galaxy A71 4G (SM-A715F) running Apple iOS 16.7.16 is CONFIRMED FULLY WORKING by the device owner!
+- Transport: Software I2C bit-banging on GPIO 6 (SDA) and GPIO 7 (SCL) via 'sweettouchbitbang=1' successfully bypasses the hardware-locked QUPv3 SE7 FIFO (GENI FIFO_IF_DISABLE_RO=1).
+- Power rails: PM6150 GPIO 4 (SPMI DVDD 1.8V) + TLMM WEST GPIO 56 (AVDD 3.3V).
+- Pins: GPIO 8 (Reset active-low), GPIO 9 (IRQ active-low).
+- Identification: Samsung S6SY771 (y771 at I2C address 0x48, hardware ID '0xac 0x37 0x71').
+
 ## A71 handoff 2026-10-22 (local investigation)
 
 Owner requested moving touch candidates 0083/0084 to main without a build.

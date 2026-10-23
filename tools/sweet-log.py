@@ -24,6 +24,6 @@ out = text.decode('utf-8', 'replace').replace('\r', '')
 print(f'# version {version}, ring {size}, total {total} bytes, flush #{seq}'
       f'{" (wrapped: oldest bytes lost)" if total > size else ""}', file=sys.stderr)
 if len(sys.argv) > 2:
-    open(sys.argv[2], 'w').write(out)
+    open(sys.argv[2], 'w', encoding='utf-8', errors='replace').write(out)
 else:
     sys.stdout.write(out)

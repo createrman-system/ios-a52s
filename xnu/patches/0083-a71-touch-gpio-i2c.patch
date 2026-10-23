@@ -185,8 +185,8 @@ diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
  	bool goodix = !ge && gid[0] == '9' && gid[1] == '8' && gid[2] == '9' && gid[3] == '6';
  	bool fts = !fe1 && !fe2 && fid1 == 0x54 && fid2 == 0x52;
 -	bool sec_ts = !se_id || !se_ev_err;
-+	bool sec_ts = !se_id && sid[0] == 0x53 && sid[1] == 0x45 &&
-+	    sid[2] == 0x37 && sid[3] == 0x71; /* A71 identity observed in TWRP. */
++	bool sec_ts = !se_id && ((sid[0] == 0xac && sid[1] == 0x37) ||
++	    (sid[0] == 0x53 && sid[1] == 0x45 && sid[2] == 0x37 && sid[3] == 0x71));
  	if (st.dead || (!goodix && !fts && !sec_ts)) {
  		printf("SWEET TOUCH: no supported IC (goodix=%d fts=%d sec_ts=%d dead=%d); stopping\n",
  		    goodix, fts, sec_ts, st.dead);
