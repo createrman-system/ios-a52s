@@ -551,6 +551,17 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
   to the A52s live splash address `0xe1000000`. Corrected workflow run
   `39915923048` is in progress. Do not reuse the previous temporary image.
 
+- A52s bring-up update (2026-10-23): workflow run `39918612316` completed the
+  XNU build and uploaded `xnu-kernel` (artifact `12486171757`). Only the
+  optional STM marker grep failed. The owner downloaded the kernel, rebuilt
+  `shim/out/shim-boot.img`, and temporary boot reached the same shim
+  `JUMP`/`XNU jumping` line followed by a red screen. This image already
+  included commits `3ca66d7` and `d2104f6`, using the live splash reservation
+  `0xe1000000` and retaining the early console across TTBR0 teardown. Next:
+  make the verifier non-fatal and instrument the first XNU instruction-side
+  marker/bootstrap mapping. This is a temporary `fastboot boot` test only; no
+  partition write is authorized or required.
+
 - Project target is now `ios-a52s` / `createrman-system/ios-a52s`.
 - The A52s Android/TWRP/kernel sources are present under
   `GalaxyA52sFolders/`; they include SM7325 device and kernel references and
