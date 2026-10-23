@@ -1,6 +1,11 @@
-# ios-a71
+# ios-a52s
 
-**Apple's iOS 16 userland and XNU kernel ported to Qualcomm SM7150 hardware (Samsung Galaxy A71 4G / Xiaomi Redmi Note 10 Pro).**
+**Apple's iOS 16 userland and XNU kernel ported toward Qualcomm SM7325 hardware (Samsung Galaxy A52s 5G).**
+
+This is the A52s port. The original A71/Sweet bring-up remains useful as a
+reference, but its SM7150 register map and touch power sequencing must not be
+assumed to apply to the A52s. See [the A52s port guide](docs/galaxy-a52s-port.md)
+for the verified inputs and current blockers.
 
 This repository adapts Apple's open-source XNU kernel (`xnu-8796`, iOS 16 generation) and an unmodified **iOS 16.7.16 (`20H392`) userland of the iPhone X** (`iPhone10,3` / `D22AP`) for devices powered by the **Qualcomm Snapdragon 730 / 732G (`SM7150`)** platform family, specifically:
 - **Samsung Galaxy A71 4G** (`SM-A715F` / `a71` / `a715f`) &mdash; [Read the Galaxy A71 Port Guide](docs/galaxy-a71-port.md)

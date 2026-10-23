@@ -1,4 +1,4 @@
-# XNU for sweet
+# XNU for ios-a52s
 
 Built on GitHub's macOS arm64 runners by `.github/workflows/xnu.yml`, using
 [blacktop/darwin-xnu-build](https://github.com/blacktop/darwin-xnu-build) (MIT) at a pinned commit.

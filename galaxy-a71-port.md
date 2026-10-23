@@ -1,4 +1,7 @@
-# Porting iOS 16 to the Samsung Galaxy A71 4G (SM-A715F / a71)
+# Historical A71 reference
+
+This document is retained as a reference for the earlier A71 work. It is not
+the target-device guide for this repository; use `docs/galaxy-a52s-port.md`.
 
 This guide documents the technical details, hardware mappings, and flashing procedures for running Apple's XNU kernel and unmodified iOS 16.7.16 (iPhone X) userland on the **Samsung Galaxy A71 4G (`SM-A715F`)**.
 

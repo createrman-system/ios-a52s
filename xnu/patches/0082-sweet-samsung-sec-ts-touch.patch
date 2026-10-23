@@ -16,17 +16,17 @@ index 03defe6..65c9c88 100644
  #define TOUCH_FTS        2
 +#define TOUCH_SEC_TS     3
 +
-+#define SEC_TS_I2C_ADDR  0x48
-+#define SEC_TS_READ_ID   0x52
-+#define SEC_TS_READ_ONE_EVENT 0x60
-+#define SEC_TS_CMD_SENSE_ON 0x10
-+#define SEC_TS_CMD_CLEAR_EVENT_STACK 0x62
-+#define SEC_TS_COORDINATE_EVENT 0
-+#define SEC_TS_STATUS_EVENT     1
-+#define SEC_TS_EVENT_BUFF_SIZE  16
-+#define SEC_TS_COORDINATE_ACTION_PRESS   1
-+#define SEC_TS_COORDINATE_ACTION_MOVE    2
-+#define SEC_TS_COORDINATE_ACTION_RELEASE 3
++#define SEC_TS_I2C_ADDR  0x49
++#define SEC_TS_READ_ID   0x80
++#define SEC_TS_READ_ONE_EVENT 0x85
++#define SEC_TS_CMD_SENSE_ON 0x93
++#define SEC_TS_CMD_CLEAR_EVENT_STACK 0xa1
++#define SEC_TS_COORDINATE_EVENT 2
++#define SEC_TS_STATUS_EVENT     0xf
++#define SEC_TS_EVENT_BUFF_SIZE  8
++#define SEC_TS_COORDINATE_ACTION_PRESS   2
++#define SEC_TS_COORDINATE_ACTION_MOVE    5
++#define SEC_TS_COORDINATE_ACTION_RELEASE 4
  /* GT9896 is Yellowstone in Xiaomi sweet-r-oss, not the Berlin protocol. */
  #define GOODIX_PID_REG   0x4022u
  #define GOODIX_EVENT_REG 0x4180u
@@ -136,19 +136,19 @@ index 03defe6..65c9c88 100644
 +		if (err) {
 +			return err;
 +		}
-+		if (buf[0] == 0 || (buf[0] & 3u) == 3u) {
++		if (buf[0] == 0 || buf[0] == 0xffu) {
 +			break; /* Buffer empty */
 +		}
-+		uint8_t eid = buf[0] & 3u;
++		uint8_t eid = buf[0] & 0x0fu;
 +		if (eid == SEC_TS_COORDINATE_EVENT) {
-+			uint8_t tid = (buf[0] >> 2) & 0x0fu;
-+			uint8_t tchsta = (buf[0] >> 6) & 0x03u;
-+			if (tid >= 1 && tid <= TOUCH_MAX) {
-+				unsigned id = tid - 1u;
-+				unsigned raw_x = ((unsigned)buf[1] << 4) | ((buf[3] >> 4) & 0x0fu);
-+				unsigned raw_y = ((unsigned)buf[2] << 4) | (buf[3] & 0x0fu);
-+				unsigned px = raw_x > 1079u ? (raw_x * 1080u) / 4096u : raw_x;
-+				unsigned py = raw_y > 2399u ? (raw_y * 2400u) / 4096u : raw_y;
++			uint8_t tid = (buf[0] >> 4) & 0x0fu;
++			uint8_t tchsta = eid;
++			if (tid < TOUCH_MAX) {
++				unsigned id = tid;
++				unsigned raw_x = (unsigned)buf[1] | (((unsigned)buf[2] & 0x0fu) << 8);
++				unsigned raw_y = ((unsigned)buf[2] >> 4) | ((unsigned)buf[3] << 4);
++				unsigned px = (raw_x * 1079u) / 4095u;
++				unsigned py = (raw_y * 2399u) / 4095u;
 +				if (px > 1079u) px = 1079u;
 +				if (py > 2399u) py = 2399u;
 +
@@ -169,10 +169,7 @@ index 03defe6..65c9c88 100644
 +				mask = 0;
 +			}
 +		}
-+		uint8_t left = buf[7] & 0x1fu;
-+		if (left == 0) {
-+			break;
-+		}
++		/* READ_ONE_EVENT returns one event; poll again while IRQ remains active. */
 +	}
 +	touch_report(mask, x, y);
 +	return 0;
@@ -226,16 +223,8 @@ index 03defe6..65c9c88 100644
 -	touch_gpio(7, 1, 0, 0, false, false);
 -	/* Vendor GT9896 dev_confirm: reset low 2 ms, then high. */
 +	/* Samsung Galaxy A71 tsp_ldo_avdd / tsp_ldo_en is on GPIO 56 (WEST tile) */
-+	touch_gpio_west(56, 0, 0, 0, true, true);
-+	printf("SWEET TOUCH: GPIO56 (AVDD) cfg=%#x io=%#x\n",
-+	    st.gpio_west ? touch_rd(st.gpio_west, TOUCH_GPIO_CFG(56)) : 0,
-+	    st.gpio_west ? touch_rd(st.gpio_west, TOUCH_GPIO_IO(56)) : 0);
 +
-+	/* Samsung Galaxy A71 tsp_int_dvdd_en is on PM6150 GPIO 4 (SPMI) */
-+	touch_power_dvdd();
-+
-+	/* Samsung Galaxy A71 Touch Reset is on GPIO 8 (NORTH tile, active-low).
-+	 * Pulse reset LOW for 10 ms, then drive HIGH (release reset) with pull-up & 8 mA drive */
++	/* A52s leaves STM reset configured by ABL; no reset GPIO is in DT. */
  	touch_gpio(8, 0, 3, 3, true, false);
 -	touch_wait(2);
 +	touch_wait(10);
@@ -243,21 +232,19 @@ index 03defe6..65c9c88 100644
 -	touch_wait(300); /* exceeds vendor 5 ms test + 95 ms post-test wait */
 +
 +	/* Configure IRQ (GPIO 9): input, active-low, internal pull-up, 8 mA drive */
-+	touch_gpio(9, 0, 3, 3, false, false);
++	touch_gpio(81, 0, 0, 0, false, false);
 +
 +	/* Configure I2C SDA (GPIO 6) and SCL (GPIO 7): qup11, internal pull-up, 6 mA */
-+	touch_gpio(6, 1, 3, 2, false, false);
-+	touch_gpio(7, 1, 3, 2, false, false);
++	/* SE8 GPIO36/37 pinctrl is already configured by ABL. */
 +
 +	/* Allow S6SY771 IC firmware to boot (Linux kernel waits 70 ms) */
 +	touch_wait(80);
 +
 +	/* Diagnostic: check physical line levels (1 = idle high) */
-+	printf("SWEET TOUCH: bus pins SDA(6)=%u SCL(7)=%u RST(8)=%u IRQ(9)=%u\n",
-+	    touch_rd(st.gpio, TOUCH_GPIO_IO(6)) & 1u,
-+	    touch_rd(st.gpio, TOUCH_GPIO_IO(7)) & 1u,
-+	    touch_rd(st.gpio, TOUCH_GPIO_IO(8)) & 1u,
-+	    touch_rd(st.gpio, TOUCH_GPIO_IO(9)) & 1u);
++	printf("SWEET TOUCH: A52s GPIO36=%u GPIO37=%u IRQ81=%u\n",
++	    touch_rd(st.gpio, TOUCH_GPIO_IO(36)) & 1u,
++	    touch_rd(st.gpio, TOUCH_GPIO_IO(37)) & 1u,
++	    touch_rd(st.gpio, TOUCH_GPIO_IO(81)) & 1u);
  	uint8_t gid[32], legacy[32], fid1 = 0, fid2 = 0;
  	st.probing = true;
  	int ge = touch_probe_info(GOODIX_PID_REG, gid);
@@ -283,7 +270,7 @@ index 03defe6..65c9c88 100644
 -	if (st.dead || goodix == fts) {
 -		printf("SWEET TOUCH: no unique supported IC (goodix=%d fts=%d dead=%d); stopping\n",
 -		    goodix, fts, st.dead);
-+	bool sec_ts = !se_id || !se_ev_err;
++	bool sec_ts = !se_id && !se_ev_err;
 +	if (st.dead || (!goodix && !fts && !sec_ts)) {
 +		printf("SWEET TOUCH: no supported IC (goodix=%d fts=%d sec_ts=%d dead=%d); stopping\n",
 +		    goodix, fts, sec_ts, st.dead);
@@ -311,7 +298,7 @@ index 03defe6..65c9c88 100644
 -		/* Optional IRQ hint still reads every 100ms, and always while down. */
 -		if (!st.irq_hint || st.active || !(touch_rd(st.gpio, TOUCH_GPIO_IO(9)) & 1u) ||
 +		/* IRQ on GPIO 9 is active LOW when events are pending */
-+		bool irq_active = !(touch_rd(st.gpio, TOUCH_GPIO_IO(9)) & 1u);
++		bool irq_active = (touch_rd(st.gpio, TOUCH_GPIO_IO(81)) & 1u) != 0;
 +		if (!st.irq_hint || st.active || irq_active ||
  		    (++ticks % 10u) == 0) {
 -			int err = st.kind == TOUCH_GOODIX ? touch_goodix() : touch_focaltech();

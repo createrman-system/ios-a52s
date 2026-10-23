@@ -1,6 +1,8 @@
 # device dumps: persist/modemst/fsg hold IMEI + calibration; live DT holds the serial
 backup/
 dtb/
+a52s-live-dt.tar.gz
+a52s-live.dtb
 recovery/
 # third-party/Apple sources fetched for reading
 research/

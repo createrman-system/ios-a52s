@@ -40,7 +40,7 @@ else
 		--cmdline "console=null" -o out/shim-boot.img
 fi
 
-# Package Odin flashable tar for Samsung devices (Galaxy A71 4G)
+# Package Odin flashable tar for Samsung devices (Galaxy A52s 5G)
 if command -v python3 >/dev/null 2>&1; then
 	python3 ../tools/samsung-tar.py out/shim-boot.img out/shim-boot.tar || true
 fi

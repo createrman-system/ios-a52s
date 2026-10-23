@@ -472,3 +472,85 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
      cpu_init, before arm_vm_init.
   5. panic hook at top of panic_trap_to_debugger: va_copy + _doprnt(fmt, &copy, sweet_early_putc, 16).
   Verify with tools/xnu-cc.py (compile+symbols) and patch-order simulation before the single CI run.
+## A52s port handoff (2026-10-23) - INITIAL PORT SCAFFOLD
+
+### Update: A52s hardware map received
+
+- Observation: handset is `SM-A528B`, boot device `1d84000.ufshc`.
+- Observation: `adb shell su -c id` confirms root Magisk context. Live
+  `/proc/iomem` confirms UFS/PHY/ICE (`0x01d84000`, `0x01d87000`,
+  `0x01d88000`), DWC3 `0x0a600000`, and pinctrl `0x0f000000`; the captured
+  `a52s-live-dt.tar.gz` is UTF-16-corrupted by Windows redirection and is not
+  usable as a DT archive.
+- User-provided map: GICD `0x17a00000`, GICR `0x17a60000`, timer 19.2 MHz,
+  UFS `0x01d84000` IRQ 265, framebuffer `0x9c000000`, MDSS `0xae000000`,
+  STM `stm_ts` at I2C `0x49` on SE8 `0xa94000`, USB DWC3 `0x0a600000`, and
+  PMK8350/PM7325/PM8350C/PMR735A.
+- Updated the ADT identity/CPU profile and annotated shim/UFS constants.
+- The existing `sec_ts` driver is not compatible with STM `stm_ts`; touch
+  GPIOs, regulators, panel stride/format, RAM carve-outs, and the complete
+  live DT still need read-only confirmation.
+- Live DT parsing confirms STM `stm_ts` at SE8 `0xa94000`, address `0x49`,
+  IRQ GPIO 81, PM8350C LDO7 AVDD, 4096x4096 coordinates, and firmware
+  `tsp_stm/fts5cu56a_a52sxq.bin`. No reset GPIO property is present.
+- Added `docs/a52s-stm-touch.md` and `tools/stmfts_protocol.py`. The host-side
+  8-byte STM event decoder self-test passes. Kernel integration is unfinished:
+  SE8 clock/reset/pinctrl registers still need confirmation before writing the
+  XNU transport patch.
+- `/proc/iomem` resolves the framebuffer conflict: `0xe1000000-e33fffff` is
+  reserved and `0x9c000000` is absent. A52s shim/ADT now use framebuffer
+  `0xe1000000`, size `0x02300000`; QEMU retains its separate constants.
+- DRM confirms the A52s panel modes `1080x2400` at 120 Hz and 60 Hz. Regex
+  commands through `adb shell su -c` remain unreliable in PowerShell; use raw
+  output plus local filtering for the framebuffer address investigation.
+
+### Update: A52s SE8 transport facts derived from bundled kernel source
+
+- Observation: the SM7325/Lahaina kernel labels the touchscreen bus
+  `qupv3_se8_i2c`, with the live overlay remapped to `0x00a94000`; its wrapper
+  is `qcom,qupv3_1_geni_se@0x00ac0000`.
+- Observation: the generic Lahaina SE8 I2C pin group is GPIO36/GPIO37, QUP8
+  function, 2 mA, pull-up; the live STM interrupt is GPIO81, input with no
+  pull, active-high according to the captured DT property.
+- Observation: A52s touchscreen AVDD is PM8350C L7 (`pm8350c_l7`), and the
+  DT explicitly marks the STM controller with no reset GPIO and
+  `sec,unuse_dvdd_power`.
+- Consequence: the XNU touch port must use STM FTS commands at 0x49, SE8 at
+  0xa94000, TLMM GPIO36/37 for I2C and GPIO81 for the interrupt; the A71
+  S6SY771 GPIO/reset/PM6150-DVDD sequence must not be reused.
+- Next required observation before finalizing transport: read-only SE8
+  register values and live GPIO36/37/81 states, because ABL/Linux owns the
+  clock/pinctrl setup and XNU must not guess register offsets or polarity.
+- User confirmed `/system/bin/devmem` is available. The first register loops
+  failed locally because PowerShell quoting produced an invalid remote `for`
+  command; no device state was changed.
+- Follow-up: Android's `devmem` utility has no access to `/dev/mem`, so the
+  physical-register reads cannot be used on this production kernel. The
+  bundled DTS remains the authoritative source for the bootloader-inherited
+  SE8 setup.
+- Implemented the first A52s touch transport conversion in patch 0082:
+  STM address 0x49, STM commands/events, SE8 base 0xa94000, TLMM base
+  0x0f000000, GPIO81 interrupt, PM8350C L7 AVDD, and no A71 reset/DVDD
+  sequence. Repository patch numbering and Python validation pass. Full XNU
+  compilation and handset boot remain outstanding; no device partitions were
+  written.
+- Current blocker: the local checkout cannot write `.git/index` or `.git/config`,
+  so the completed source cannot yet be committed, pushed to `ios-a52s`, or
+  built by GitHub Actions. The repository validator also reports seven
+  pre-existing shell-script syntax failures unrelated to this port. The A52s
+  patch itself is not claimed boot-tested.
+
+- Project target is now `ios-a52s` / `createrman-system/ios-a52s`.
+- The A52s Android/TWRP/kernel sources are present under
+  `GalaxyA52sFolders/`; they include SM7325 device and kernel references and
+  `stm_ts` touchscreen support.
+- Observation: the current XNU/shim hardware constants are still from the
+  Sweet/A71 bring-up (`0x9c000000` framebuffer, SM7150 MMIO, A71 S6SY771
+  touch path). No A52s handset boot or live DT extraction has been performed.
+- Added `docs/galaxy-a52s-port.md` with the verified inputs, unknown hardware
+  values, and safe bring-up order. No device partitions were written.
+- Next concrete action: obtain an A52s live DT/boot dump and fill an explicit
+  A52s hardware profile before changing `mkadt.py`, the shim, or touch code.
+- Unfinished: A52s framebuffer/GIC/UFS/QUP/touch power mappings, `stm_ts`
+  driver port, A52s kernel build, and handset boot validation.
+
