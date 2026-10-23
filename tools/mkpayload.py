@@ -140,9 +140,19 @@ def adt_dram(adt_blob):
             struct.unpack('<Q', chosen.prop('dram-size'))[0])
 
 
-def build(kernel_path, adt_path, cmdline, ramdisk_path=None):
+def build(kernel_path, adt_path, cmdline, ramdisk_path=None, skip_a52s_physical_timer=False):
     buf = bytearray(open(kernel_path, 'rb').read())
     m = parse_macho(buf)
+    if skip_a52s_physical_timer:
+        # A52s enters XNU at EL1 and faults on the first CNTP_CTL_EL0 write.
+        # Keep this opt-in and exact: it is a bring-up experiment until the
+        # corresponding arm_timer.c source path is patched properly.
+        insn = struct.pack('<I', 0xd51be228)  # msr CNTP_CTL_EL0, x8
+        hits = [i for i in range(0, len(buf) - 3, 4) if buf[i:i + 4] == insn]
+        if len(hits) != 1:
+            raise SystemExit(f'A52s CNTP workaround expected one instruction, found {len(hits)}')
+        struct.pack_into('<I', buf, hits[0], 0xd503201f)  # nop
+        print(f'a52s_timer_workaround: patched Mach-O file offset 0x{hits[0]:x}')
     nfix = apply_chained_fixups(buf, m)
     segs = [s for s in m['segs'] if s['vmsize']]
     text = m['segs'][0]
@@ -198,8 +208,11 @@ if __name__ == '__main__':
     ap.add_argument('kernel'); ap.add_argument('adt'); ap.add_argument('out')
     ap.add_argument('--cmdline', default='debug=0xc serial=3 cpus=1 keepsyms=1')
     ap.add_argument('--ramdisk', help='root image for md0 (boot with rd=md0)')
+    ap.add_argument('--skip-a52s-physical-timer', action='store_true',
+                    help='diagnostic: replace the known A52s CNTP_CTL_EL0 fault with NOP')
     a = ap.parse_args()
-    blob, info = build(a.kernel, a.adt, a.cmdline, a.ramdisk)
+    blob, info = build(a.kernel, a.adt, a.cmdline, a.ramdisk,
+                       a.skip_a52s_physical_timer)
     open(a.out, 'wb').write(blob)
     for k, v in info.items():
         if k != 'segs':
