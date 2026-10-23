@@ -539,6 +539,17 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
   built by GitHub Actions. The repository validator also reports seven
   pre-existing shell-script syntax failures unrelated to this port. The A52s
   patch itself is not claimed boot-tested.
+- Handoff update: permissions were corrected by the user. Commit `537df54`
+  is pushed to `createrman-system/ios-a52s`; workflow run `39911274635` built
+  XNU successfully but failed only because its old verification grep searched
+  for A71's `Samsung S6SY771`. Commit `c4f8af3` updates that check for the A52s
+  STM marker. Corrected workflow run `39912115909` is currently compiling;
+  no handset boot or partition write has occurred.
+- A temporary boot test reached the shim's `JUMP`/`XNU jumping` line and
+  showed a red screen. Diagnosis: patch 0010 still used A71's early framebuffer
+  `0x9c000000`; commit `3ca66d7` changes all three early-XNU framebuffer uses
+  to the A52s live splash address `0xe1000000`. Corrected workflow run
+  `39915923048` is in progress. Do not reuse the previous temporary image.
 
 - Project target is now `ios-a52s` / `createrman-system/ios-a52s`.
 - The A52s Android/TWRP/kernel sources are present under
