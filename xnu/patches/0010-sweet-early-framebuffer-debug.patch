@@ -95,13 +95,13 @@ index ccbb188..777aca4 100644
  	mov		x21, #0
  
 +#if defined(SWEET)
-+	/* Stage 0: white 64x32 band, no stack or page tables needed. */
-+	MOV64	x0, (0xe1000000 + 2368 * 4320)
-+	mov		w1, #-1
-+	mov		x2, #32
++	/* Stage 0: unmistakable green 1080x128 band, before any C/MMU setup. */
++	MOV64	x0, 0xe1000000
++	mov		w1, #0xff00ff00
++	mov		x2, #128
 +	mov		x4, #4320
 +Lsweet_mark_row:
-+	mov		x3, #64
++	mov		x3, #1080
 +	mov		x5, x0
 +Lsweet_mark_pixel:
 +	str		w1, [x5], #4

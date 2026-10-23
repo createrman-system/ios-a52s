@@ -589,6 +589,13 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
   marker/bootstrap mapping. This is a temporary `fastboot boot` test only; no
   partition write is authorized or required.
 
+- The owner tested the loader fix: `v_display=0` preserved all shim text and
+  the 2-second delay was visible. The handset then rebooted immediately after
+  the XNU handoff. A PowerShell recovery read of the last userdata blocks
+  succeeded, but decoding reported no `SWEETLOG` header, confirming failure
+  before the persistent UFS logger initialized. Next diagnostic enlarges the
+  first assembly marker to a bright green 1080x128 band at `0xe1000000`.
+
 - Project target is now `ios-a52s` / `createrman-system/ios-a52s`.
 - The A52s Android/TWRP/kernel sources are present under
   `GalaxyA52sFolders/`; they include SM7325 device and kernel references and
