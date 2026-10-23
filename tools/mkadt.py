@@ -231,7 +231,9 @@ def build(seed=None, qemu=False, highmem=False):
     # (iPhone10,3). 'xiaomi,sweet' stays for SweetPlatformExpert matching.
     return node('device-tree', [
         ph(),
-        ('compatible', cstr('D22AP') + cstr('iPhone10,3') + cstr('samsung,a52sxq') + cstr('qcom,sm7325') + cstr('AppleARM')),
+        # Keep xiaomi,sweet for the built-in SweetPlatformExpert matcher;
+        # the remaining entries preserve the iPhone identity and A52s facts.
+        ('compatible', cstr('D22AP') + cstr('iPhone10,3') + cstr('xiaomi,sweet') + cstr('samsung,a52sxq') + cstr('qcom,sm7325') + cstr('AppleARM')),
         ('model', cstr('iPhone10,3')),
         ('target-type', cstr('D22')),
         ('target-sub-type', cstr('D22AP')),
