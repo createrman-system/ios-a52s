@@ -135,6 +135,9 @@ const char *loader_boot(uintptr_t dtb)
 		ba->CommandLine[i] = p->cmdline[i];
 	ba->memSizeActual = p->mem_size;
 	con_hex2("BOOTARG", "pa=", ba_pa, "top=", top);
+	uint64_t currentel;
+	__asm__ volatile("mrs %0, CurrentEL" : "=r"(currentel));
+	con_hex("CURRENTEL", currentel);
 
 	uintptr_t entry_pa = p->entry_va + pa_of_va_base;
 	con_hex("JUMP", entry_pa);
