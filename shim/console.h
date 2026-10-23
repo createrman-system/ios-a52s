@@ -15,6 +15,8 @@
 extern volatile uint32_t *con_fb;
 
 void con_clear(uint32_t bg);
+/* Solid-colour band at the top; height in pixels (1 text row = 48 px). */
+void con_top_band(uint32_t color, int height);
 void con_skip(void);
 void con_str(const char *label, const char *s);
 void con_hex(const char *label, uint64_t v);

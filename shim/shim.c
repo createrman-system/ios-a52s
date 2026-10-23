@@ -103,6 +103,8 @@ static void delay_ms(unsigned ms)
 
 static void __attribute__((noreturn)) reset(unsigned after_s)
 {
+	/* Bright-green band at top = visual "about to reboot" indicator. */
+	con_top_band(GREEN, 144);	/* 144 px = 3 text rows (each row is 48 px) */
 	con_skip();
 	con_str("RESET", after_s > 20 ? "in 40s" : "in 20s");
 	delay_ms(after_s * 1000);

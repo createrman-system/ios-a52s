@@ -26,6 +26,20 @@ void con_clear(uint32_t bg)
 	row = 0;
 }
 
+/* Draw a solid-colour horizontal band across the top of the framebuffer.
+ * height is in pixels; text rows are CH_H = 16*SCALE = 48 px each.
+ * Does NOT reset the text cursor — call before or after text output. */
+void con_top_band(uint32_t color, int height)
+{
+	if (height > FB_H)
+		height = FB_H;
+	for (int y = 0; y < height; y++) {
+		volatile uint32_t *line = con_fb + y * (FB_STRIDE / 4);
+		for (int x = 0; x < FB_W; x++)
+			line[x] = color;
+	}
+}
+
 static void put_char(int col, char ch, uint32_t fg)
 {
 	if (ch < 0x20 || ch > 0x7e)
