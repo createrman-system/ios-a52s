@@ -68,6 +68,18 @@ writes, reboot, CI run or push. GENI/GSI mode is a hypothesis needing a log.
 
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
+## A52s bring-up milestone (2026-10-23, latest)
+
+The A52s high-memory payload with the physical-timer diagnostic workaround now
+boots through XNU platform initialization. The owner reports the screen remains
+unchanged for more than two minutes after the visible SWEET lines. Photos show
+successful platform-expert, PMIC, UFS, AppleCLCD (1080x2400, stride 4320),
+touch/HID, and trust-cache registration; this is later than the former timer
+undefined-instruction panic. The exact final wait or panic is not yet known.
+
+Next action: collect the persistent SWEET log from recovery while UFS has been
+initialized. Do not flash partitions; continue using temporary fastboot boot.
+
 ## Agent handoff / active work (2026-10-15, latest)
 
 ### >>> UPDATE 2026-10-18 (read first, then the 10-17 handoff below) <<<

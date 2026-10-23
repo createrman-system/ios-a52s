@@ -1072,6 +1072,7 @@
 +	IOWorkLoop         *fWorkLoop;
 +	IOTimerEventSource *fVsync;
 +	uint64_t            fVsyncCount;
++	bool                fRegistered;
 +
 +	static void vsyncFired(OSObject *owner, IOTimerEventSource *sender);
 +
@@ -1155,7 +1156,6 @@
 +	setProperty(kIOUserClientClassKey, "IOMobileFramebufferUserClient");
 +	setProperty("external", false);
 +	setProperty("DisplayPipePlaneBaseAlignment", 64ULL, 32);
-+	registerService();
 +	IOLog("SWEET FB: AppleCLCD %ux%u stride %u at 0x%llx, default surface %u\n",
 +	    fWidth, fHeight, fRowBytes, fPhys, fSurface->id);
 +	return true;
@@ -1165,6 +1165,11 @@
 +AppleCLCD::vsyncFired(OSObject *owner, IOTimerEventSource *sender)
 +{
 +	AppleCLCD *fb = (AppleCLCD *)owner;
++	if (!fb->fRegistered) {
++		fb->fRegistered = true;
++		IOLog("SWEET FB: deferred registerService\n");
++		fb->registerService();
++	}
 +	uint64_t now = mach_absolute_time();
 +	uint64_t count = ++fb->fVsyncCount;
 +	uint64_t values[6] = {

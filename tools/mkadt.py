@@ -74,7 +74,7 @@ def node(name, props=(), children=()):
     return n
 
 
-def build(seed=None, qemu=False, highmem=False):
+def build(seed=None, qemu=False, highmem=False, no_display=False):
     """qemu=True: same tree, but with QEMU virt's GIC addresses and CNTFRQ (tools/qemu-sweet.py)."""
     phys_base, mem_size = (HIGH_PHYS_BASE, HIGH_MEM_SIZE) if highmem else (PHYS_BASE, MEM_SIZE)
     # Carve the panic log off the top so the kernel never allocates over it.
@@ -188,6 +188,9 @@ def build(seed=None, qemu=False, highmem=False):
             ('canvas-width', u32(1125)),
             ('canvas-height', u32(2436)),
         ])])
+    if no_display:
+        arm_io.children = [c for c in arm_io.children
+                           if dict((k, v) for k, f, v in c.props).get('name') != b'disp0\0']
 
     fbcon = node('sweet-fbcon', [
         ph(),
@@ -244,7 +247,8 @@ def build(seed=None, qemu=False, highmem=False):
 
 
 if __name__ == '__main__':
-    root = build(qemu='--qemu' in sys.argv, highmem='--highmem' in sys.argv)
+    root = build(qemu='--qemu' in sys.argv, highmem='--highmem' in sys.argv,
+                 no_display='--no-display' in sys.argv)
     blob = adt.serialize(root)
     open(sys.argv[1], 'wb').write(blob)
     if '--dump' in sys.argv:
