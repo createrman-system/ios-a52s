@@ -648,3 +648,14 @@ boot-tested on the handset.
 high-memory ADT, and use temporary `fastboot boot`. Preserve the current
 diagnostic workaround image until the source-built result is observed.
 
+## A52s physical-timer panic follow-up (2026-10-24)
+
+The first source timer fix was tested on the handset and the photo showed an
+undefined-instruction panic at `sleh.c:951`, instruction `0xd51be228`
+(`msr CNTP_CTL_EL0, x8`). Matching XNU 8796 source identified the remaining
+access in `_enable_virtual_timer()`, which enabled CNTV and then masked CNTP.
+
+Added patch `0086-sweet-no-physical-timer-access.patch` to skip that CNTP write
+and the per-CPU Apple timer setup for SWEET. Patch validation now passes for
+86 contiguous patches. The fix is not yet CI-built or handset-tested.
+
