@@ -1,3 +1,9 @@
+## A52s Samsung boot-path correction (2026-10-24)
+
+The Galaxy A52s has no `fastboot boot` facility. Samsung Download Mode uses Odin/LOKE; Heimdall is another host client. An Odin AP package writes the selected partition, so it is not a temporary boot. The no-display diagnostic image is an isolation experiment, not a usable fix. The timer-fixed payload contains `ufsrw=1 rootrw=1` and may write userdata if the root mounts writable. No partition or userdata write was performed.
+
+---
+
 ## A52s AppleCLCD stop-point and read-only diagnostic (2026-10-24)
 
 **Handset evidence:** photos at 16:46 show the timer-instruction panic is gone. XNU reaches platform/scheduler initialization and the framebuffer driver reports `AppleCLCD 1080x2400 stride 4320 at 0xe1000000, default surface 1`; no panic or SpringBoard/userland startup appears in the supplied tail. The earlier warning about a legacy interrupt-controller lookup at `0x10000000` is not itself proof of a GIC failure: the A52s GICv3 path uses the verified `0x17a00000`/`0x17a60000` regions.
@@ -6,7 +12,7 @@
 
 **Diagnostic image:** `shim/out/shim-boot-a52s-diagnostic-nodisplay.img`, 17461248 bytes, SHA-256 `7aee165798c323fca7b4af09a1c2db2b800f72c0b8ecaf938944ca5e71806347`. Built from CI kernel `40098198210`, high-memory A52s ADT with `disp0` omitted, and command line `debug=0xc cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 sweetlog=0 sweetusb=2`. The Android boot-v2 header and payload were inspected; `sweetlog=0` and omission of `ufsrw=1`/`rootrw=1` keep this test read-only. It is an isolation image, not an iOS boot candidate: removing `disp0` intentionally disables AppleCLCD.
 
-**Next:** use temporary `fastboot boot` with this diagnostic image. If the kernel advances beyond the current stop, that isolates the display-service path; if it stops earlier, send a clear final console photo. This image must not be flashed to a partition. No new kernel CI run was needed because only the ADT and boot arguments differ from the verified CI kernel.
+**Samsung boot-path correction (2026-10-24):** the Galaxy A52s does not support `fastboot boot`. Samsung Download Mode uses the Odin/LOKE protocol; Heimdall is another host client. An AP package writes the selected partition and is not a temporary RAM boot. The no-display diagnostic image above is not a device-ready fix. The timer-fixed payload also contains `ufsrw=1 rootrw=1`, so do not recommend it for another handset retry while userdata-write behavior is unresolved. No partition was written by this work. Next: prepare a display-enabled, read-only A52s Odin AP candidate and document its write behavior before handing it over; record the next concrete console state.
 
 ---
 
