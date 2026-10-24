@@ -109,9 +109,14 @@ def validate_shell_scripts(verbose=False):
 
     for path in sh_files:
         rel = os.path.relpath(path, REPO_ROOT)
-        res = subprocess.run(['bash', '-n', path], capture_output=True, text=True)
+        # Feed the script on stdin instead of passing a Windows absolute path
+        # to Git Bash. Universal newlines also normalize CRLF checkouts so the
+        # syntax result is independent of core.autocrlf.
+        with open(path, 'r', newline=None) as script:
+            source = script.read().replace('\r', '')
+        res = subprocess.run(['bash', '-n'], input=source.encode('utf-8'), capture_output=True)
         if res.returncode != 0:
-            errors.append(f"{rel}: {res.stderr.strip()}")
+            errors.append(f"{rel}: {res.stderr.decode('utf-8', errors='replace').strip()}")
         elif verbose:
             print(f"    [OK] {rel}")
 
@@ -126,6 +131,10 @@ def validate_shell_scripts(verbose=False):
 
 
 def main():
+    # This validator is often run from Windows PowerShell, where the default
+    # console encoding may be cp1252 and cannot print the status glyphs below.
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     ap = argparse.ArgumentParser(description="Validate repository integrity, patches, and scripts.")
     ap.add_argument('-v', '--verbose', action='store_true', help='Show detailed per-file output')
     a = ap.parse_args()
