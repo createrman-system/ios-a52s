@@ -118,9 +118,28 @@ jobs:
           (cd out && shasum -a 256 kernel.* > SHA256SUMS) || true
 
       - name: Verify A52s STM touch driver in built kernel
+        if: env.MACHINE_CONFIG == 'SWEET'
         run: |
-          # The marker may be optimized out; the build result is authoritative.
-          strings out/kernel.development.sweet | grep "SWEET TOUCH: A52s GPIO" || true
+          # Fail the workflow if the A52s implementation was not linked.
+          strings out/kernel.development.sweet | grep -Fq "SWEET TOUCH: A52s GPIO" || {
+            echo "A52s STM touch-driver marker missing from the SWEET kernel" >&2
+            exit 1
+          }
+
+      - name: Verify A52s physical timer fault opcode is absent
+        if: env.MACHINE_CONFIG == 'SWEET'
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          kernel = Path("out/kernel.development.sweet").read_bytes()
+          # Little-endian encoding of MSR CNTP_CTL_EL0, x8 (0xd51be228),
+          # the exact undefined instruction captured on the A52s.
+          opcode = bytes.fromhex("28 e2 1b d5")
+          count = kernel.count(opcode)
+          print(f"CNTP_CTL_EL0,x8 opcode occurrences: {count}")
+          if count:
+              raise SystemExit("A52s kernel still contains the known physical timer fault")
+          PY
 
       - uses: actions/upload-artifact@v4
         if: always()
