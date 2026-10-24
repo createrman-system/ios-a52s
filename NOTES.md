@@ -1,6 +1,8 @@
 ## A52s Samsung boot-path correction (2026-10-24)
 
-The Galaxy A52s has no `fastboot boot` facility. Samsung Download Mode uses Odin/LOKE; Heimdall is another host client. An Odin AP package writes the selected partition, so it is not a temporary boot. The no-display diagnostic image is an isolation experiment, not a usable fix. The timer-fixed payload contains `ufsrw=1 rootrw=1` and may write userdata if the root mounts writable. No partition or userdata write was performed.
+The Galaxy A52s has no `fastboot boot` facility. Samsung Download Mode uses Odin/LOKE; Heimdall is another host client. An Odin AP package writes the selected partition, so it is not a temporary boot. The no-display diagnostic image is an isolation experiment, not a usable fix. The prior timer-fixed payload contains `ufsrw=1 rootrw=1` and may write userdata if the root mounts writable. No partition or userdata write was performed.
+
+**Prepared read-only diagnostic AP package:** `shim/out/a52s-readonly-display-40098198210-odin.tar`, SHA-256 `77e1bc27c96caec5d35f80ec28f1beff3c5560aea3e9d3384f6989e4305a43bb`. It contains `boot.img` (`shim/out/a52s-readonly-display-40098198210.img`, SHA-256 `627fb3b00f6e4c604b4dfb3e8d0df388f3c8a862e12dd772b82c2d08ab74b490`), built from CI kernel 40098198210 and the A52s high-memory ADT with `disp0`. The payload omits `ufsrw=1` and `rootrw=1`, which default the patched UFS/root paths to read-only, and disables persistent logging. The Android boot-v2 header and Odin tar member were verified. This is a diagnostic, not a SpringBoard-ready image. The owner requested an image to flash; loading this AP package writes the boot partition. We did not flash it.
 
 ---
 
@@ -12,7 +14,7 @@ The Galaxy A52s has no `fastboot boot` facility. Samsung Download Mode uses Odin
 
 **Diagnostic image:** `shim/out/shim-boot-a52s-diagnostic-nodisplay.img`, 17461248 bytes, SHA-256 `7aee165798c323fca7b4af09a1c2db2b800f72c0b8ecaf938944ca5e71806347`. Built from CI kernel `40098198210`, high-memory A52s ADT with `disp0` omitted, and command line `debug=0xc cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 sweetlog=0 sweetusb=2`. The Android boot-v2 header and payload were inspected; `sweetlog=0` and omission of `ufsrw=1`/`rootrw=1` keep this test read-only. It is an isolation image, not an iOS boot candidate: removing `disp0` intentionally disables AppleCLCD.
 
-**Samsung boot-path correction (2026-10-24):** the Galaxy A52s does not support `fastboot boot`. Samsung Download Mode uses the Odin/LOKE protocol; Heimdall is another host client. An AP package writes the selected partition and is not a temporary RAM boot. The no-display diagnostic image above is not a device-ready fix. The timer-fixed payload also contains `ufsrw=1 rootrw=1`, so do not recommend it for another handset retry while userdata-write behavior is unresolved. No partition was written by this work. Next: prepare a display-enabled, read-only A52s Odin AP candidate and document its write behavior before handing it over; record the next concrete console state.
+**Samsung boot-path correction:** the A52s cannot use `fastboot boot`. The no-display diagnostic image is not a fix. A display-enabled, read-only Odin AP diagnostic package is now recorded at the top of this handoff. After the owner flashes it, capture the next console milestone. No phone partition was written by this work.
 
 ---
 
