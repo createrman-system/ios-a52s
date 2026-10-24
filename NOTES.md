@@ -1,3 +1,11 @@
+## A52s AppleCLCD startup freeze fix (2026-10-24)
+
+**Confirmed build defect:** CI run `40103139206` logged that `0061-sweet-iphone-x-display-size.patch` was skipped because its hunk expected an existing `registerService()` statement that was absent from the preceding patch state. The built source therefore had neither the immediate AppleCLCD registration nor iPhone X logical display dimensions. `AppleCLCD::start` only deferred `registerService()` until the first vsync callback, making userspace display discovery depend on that timer callback. The final visible AppleCLCD line is consistent with this service-start transition, though handset behavior still requires validation.
+
+**Fix pushed:** commit `41b71acaa0e141c4c4dd5d42baf7eb075e85ae47` repairs patch 0061 so it applies, registers AppleCLCD synchronously, initializes vsync/swap/console/power state before scheduling the timer, removes the second deferred registration, emits `SWEET FB: vsync active` on the first tick, and sets the intended 1125x2436 logical display geometry. CI now requires both the display geometry and vsync marker strings in the kernel. Patch apply-check against the full patched source from CI run `40103139206` passed. Repository validator passes.
+
+Fresh XNU build and the new marker checks are running as workflow `40104736416`; wait for success before distributing the replacement image. The last known image `a52s-usblog-readonly-40102029579.img` predates this fix and should not be reused for testing this change.
+
 ## A52s repository audit and CI verification gates (2026-10-24)
 
 Audited the current `origin/main` snapshot in a separate clean worktree (`shim/out/a52s-audit`) to preserve the original checkout's pre-existing changes. `python tools/validate-repo.py` passes: all 86 numbered XNU patches parse and are contiguous, all 20 Python tools compile, and all 7 shell scripts pass syntax checks. A separate `git apply --stat` pass parsed all 86 patches. Host framebuffer console compile also succeeds.
