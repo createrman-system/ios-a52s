@@ -1,0 +1,13 @@
+diff --git a/osfmk/arm/arm_init.c b/osfmk/arm/arm_init.c
+--- a/osfmk/arm/arm_init.c
++++ b/osfmk/arm/arm_init.c
+@@ -365,7 +365,9 @@ arm_init(
+ 	PE_init_platform(FALSE, args); /* Get platform expert set up */
+ 
+ #if __arm64__
++#if !defined(SWEET)
+ 	configure_timer_apple_regs();
++#endif
+ #endif
+ 
+ 	ml_parse_cpu_topology();

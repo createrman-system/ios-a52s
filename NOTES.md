@@ -631,3 +631,20 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
 - Unfinished: A52s framebuffer/GIC/UFS/QUP/touch power mappings, `stm_ts`
   driver port, A52s kernel build, and handset boot validation.
 
+## A52s kernel timer source fix (2026-10-24)
+
+**Change:** added patch `xnu/patches/0085-sweet-use-virtual-timer.patch`.
+For `SWEET`, XNU now skips `configure_timer_apple_regs()`, which programs the
+Apple physical timer path and caused the A52s `CNTP_CTL_EL0` fault. The SWEET
+interrupt path already uses the Qualcomm virtual timer (INTID 19), so this
+removes the need for the post-build `--skip-a52s-physical-timer` NOP hack.
+
+**Validation:** repository patch numbering/format and Python syntax pass for
+85 patches. The validator still reports the same seven pre-existing shell
+syntax failures. The source patch has not yet been built by GitHub Actions or
+boot-tested on the handset.
+
+**Next:** run the XNU CI build, package the resulting kernel with the A52s
+high-memory ADT, and use temporary `fastboot boot`. Preserve the current
+diagnostic workaround image until the source-built result is observed.
+
