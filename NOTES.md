@@ -1,3 +1,15 @@
+## A52s AppleCLCD stop-point and read-only diagnostic (2026-10-24)
+
+**Handset evidence:** photos at 16:46 show the timer-instruction panic is gone. XNU reaches platform/scheduler initialization and the framebuffer driver reports `AppleCLCD 1080x2400 stride 4320 at 0xe1000000, default surface 1`; no panic or SpringBoard/userland startup appears in the supplied tail. The earlier warning about a legacy interrupt-controller lookup at `0x10000000` is not itself proof of a GIC failure: the A52s GICv3 path uses the verified `0x17a00000`/`0x17a60000` regions.
+
+**Log check:** the handset was connected in TWRP recovery as `RZCRA0BJRRV`. A read-only pull of the final 1025 4-KiB blocks from `/dev/block/sda34` (userdata, 114156351488 bytes) found an all-zero header, not `SWEETLOG`. The tested payload asks for `sweetlog=1`, `ufsrw=1`, and `rootrw=1`; the absence of a header means the logger did not produce a recoverable record (whether because UFS startup was not reached or another logger condition failed is not yet established). No phone writes were made by this log check.
+
+**Diagnostic image:** `shim/out/shim-boot-a52s-diagnostic-nodisplay.img`, 17461248 bytes, SHA-256 `7aee165798c323fca7b4af09a1c2db2b800f72c0b8ecaf938944ca5e71806347`. Built from CI kernel `40098198210`, high-memory A52s ADT with `disp0` omitted, and command line `debug=0xc cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 sweetlog=0 sweetusb=2`. The Android boot-v2 header and payload were inspected; `sweetlog=0` and omission of `ufsrw=1`/`rootrw=1` keep this test read-only. It is an isolation image, not an iOS boot candidate: removing `disp0` intentionally disables AppleCLCD.
+
+**Next:** use temporary `fastboot boot` with this diagnostic image. If the kernel advances beyond the current stop, that isolates the display-service path; if it stops earlier, send a clear final console photo. This image must not be flashed to a partition. No new kernel CI run was needed because only the ADT and boot arguments differ from the verified CI kernel.
+
+---
+
 ## A52s CNTP panic correction and replacement boot image (2026-10-24)
 
 **Handset evidence:** the owner’s boot photo from the prior image shows an undefined-instruction panic at `sleh.c:951`, PC `0xfffffe00074913c8`, instruction `0xd51be228` (`MSR CNTP_CTL_EL0, x8`), followed by nested-panic stall. The earlier successful CI build was insufficient: its kernel contained exactly one copy of that opcode at file offset `0x48d3c8`, matching the panic PC when mapped into `__TEXT`.
