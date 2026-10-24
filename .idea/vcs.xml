@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="VcsDirectoryMappings">
+    <mapping directory="" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/GalaxyA52sFolders/android_device_samsung_a52sxq" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/GalaxyA52sFolders/android_device_samsung_a52sxq_twrp" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/GalaxyA52sFolders/android_kernel_qcom_sm8250" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/GalaxyA52sFolders/android_kernel_samsung_sm7325" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/GalaxyA52sFolders/extra/android_bootable_recovery" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/GalaxyA52sFolders/extra/darwin-xnu-build" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/GalaxyA52sFolders/extra/ipsw" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/GalaxyA52sFolders/extra/xnu" vcs="Git" />
+  </component>
+</project>

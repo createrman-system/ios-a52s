@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/.idea/ios-a71.iml" filepath="$PROJECT_DIR$/.idea/ios-a71.iml" />
+      <module fileurl="file://$PROJECT_DIR$/GalaxyA52sFolders/extra/android_bootable_recovery/tools/recovery_l10n/recovery_l10n.iml" filepath="$PROJECT_DIR$/GalaxyA52sFolders/extra/android_bootable_recovery/tools/recovery_l10n/recovery_l10n.iml" />
+      <module fileurl="file://$PROJECT_DIR$/GalaxyA52sFolders/extra/android_bootable_recovery/updater_sample/tests/tests.iml" filepath="$PROJECT_DIR$/GalaxyA52sFolders/extra/android_bootable_recovery/updater_sample/tests/tests.iml" />
+      <module fileurl="file://$PROJECT_DIR$/GalaxyA52sFolders/extra/android_bootable_recovery/tools/tools.iml" filepath="$PROJECT_DIR$/GalaxyA52sFolders/extra/android_bootable_recovery/tools/tools.iml" />
+      <module fileurl="file://$PROJECT_DIR$/GalaxyA52sFolders/extra/android_bootable_recovery/updater_sample/updater_sample.iml" filepath="$PROJECT_DIR$/GalaxyA52sFolders/extra/android_bootable_recovery/updater_sample/updater_sample.iml" />
+    </modules>
+  </component>
+</project>

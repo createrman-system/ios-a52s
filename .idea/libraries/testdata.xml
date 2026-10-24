@@ -1,0 +1,20 @@
+<component name="libraryTable">
+  <library name="testdata">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/GalaxyA52sFolders/extra/android_bootable_recovery/tests/testdata/ziptest_fake-update.zip!/" />
+      <root url="jar://$PROJECT_DIR$/GalaxyA52sFolders/extra/android_bootable_recovery/tests/testdata/otasigned_v5.zip!/" />
+      <root url="jar://$PROJECT_DIR$/GalaxyA52sFolders/extra/android_bootable_recovery/tests/testdata/deflate_tgt.zip!/" />
+      <root url="jar://$PROJECT_DIR$/GalaxyA52sFolders/extra/android_bootable_recovery/tests/testdata/deflate_src.zip!/" />
+      <root url="jar://$PROJECT_DIR$/GalaxyA52sFolders/extra/android_bootable_recovery/tests/testdata/fake-eocd.zip!/" />
+      <root url="jar://$PROJECT_DIR$/GalaxyA52sFolders/extra/android_bootable_recovery/tests/testdata/ziptest_valid.zip!/" />
+      <root url="jar://$PROJECT_DIR$/GalaxyA52sFolders/extra/android_bootable_recovery/tests/testdata/random.zip!/" />
+      <root url="jar://$PROJECT_DIR$/GalaxyA52sFolders/extra/android_bootable_recovery/tests/testdata/otasigned_v3.zip!/" />
+      <root url="jar://$PROJECT_DIR$/GalaxyA52sFolders/extra/android_bootable_recovery/tests/testdata/otasigned_4096bits.zip!/" />
+      <root url="jar://$PROJECT_DIR$/GalaxyA52sFolders/extra/android_bootable_recovery/tests/testdata/otasigned_v2.zip!/" />
+      <root url="jar://$PROJECT_DIR$/GalaxyA52sFolders/extra/android_bootable_recovery/tests/testdata/otasigned_v1.zip!/" />
+      <root url="jar://$PROJECT_DIR$/GalaxyA52sFolders/extra/android_bootable_recovery/tests/testdata/otasigned_v4.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

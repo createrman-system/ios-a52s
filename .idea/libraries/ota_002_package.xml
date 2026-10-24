@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="ota_002_package">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/GalaxyA52sFolders/extra/android_bootable_recovery/updater_sample/tests/res/raw/ota_002_package.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

@@ -1,0 +1,10 @@
+<component name="libraryTable">
+  <library name="out">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/shim/out/a52s-kernel-latest.zip!/" />
+      <root url="jar://$PROJECT_DIR$/shim/out/a52s-kernel.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>
