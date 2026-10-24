@@ -1,3 +1,11 @@
+## A52s TWRP diagnostic rerun (2026-10-24)
+
+Owner reports flashing through TWRP reached the same final visible line. The 17:05:39 photo ends at `SWEET FB: AppleCLCD 1080x2400 stride 4320 at 0xe1000000, default surface 1`; it shows no timer panic or other panic. Because the read-only display image has `sweetlog=0` and USB logging disabled, a still photo cannot distinguish a halt from later quiet boot.
+
+Prepared follow-up raw boot-v2 image for TWRP: `shim/out/a52s-usblog-readonly-40098198210.img`, SHA-256 `21a2b245ffeab4f2c09addce0ca56ab1c36452e0df3baa770e34e98741c9787`. It reuses CI kernel 40098198210 and enables `-v sweetusb=2 sweetusblog=1`, while keeping `sweetlog=0` and omitting `ufsrw=1 rootrw=1`. Header and embedded command line were verified. TWRP Install Image → Boot Image writes the boot partition. USB gadget/log delivery on the A52s is still unverified; no phone write was performed by this work.
+
+---
+
 ## A52s Samsung boot-path correction (2026-10-24)
 
 The Galaxy A52s has no `fastboot boot` facility. Samsung Download Mode uses Odin/LOKE; Heimdall is another host client. An Odin AP package writes the selected partition, so it is not a temporary boot. The no-display diagnostic image is an isolation experiment, not a usable fix. The prior timer-fixed payload contains `ufsrw=1 rootrw=1` and may write userdata if the root mounts writable. No partition or userdata write was performed.
