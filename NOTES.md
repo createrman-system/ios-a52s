@@ -1,3 +1,13 @@
+## A52s repository audit and CI verification gates (2026-10-24)
+
+Audited the current `origin/main` snapshot in a separate clean worktree (`shim/out/a52s-audit`) to preserve the original checkout's pre-existing changes. `python tools/validate-repo.py` passes: all 86 numbered XNU patches parse and are contiguous, all 20 Python tools compile, and all 7 shell scripts pass syntax checks. A separate `git apply --stat` pass parsed all 86 patches. Host framebuffer console compile also succeeds.
+
+The prior CI kernel artifact `40098198210` was inspected: it contains the A52s STM marker and zero occurrences of little-endian `MSR CNTP_CTL_EL0, x8` (`28 e2 1b d5`). This matches the observed timer panic fix. The supplied later device photo reaches `AppleCLCD`; it does not establish whether XNU halted or continued without visible diagnostics, and it does not show root mount/launchd/SpringBoard. Therefore the next hardware blocker is not yet identified.
+
+Found and fixed two repository-verification issues: `tools/validate-repo.py` was not portable on Windows due to path encoding/CRLF handling; commit `c1e0ba7` fixes that. The CI touch-driver check used `|| true`, so missing code could never fail the build; commit `a624a75` makes the A52s marker mandatory and adds a fatal scan for the known timer opcode. Both commits are pushed to `main`.
+
+Fresh XNU CI run `40102029579` on source revision `5b72e32ea6aa04a28185723e459f61ad66197082` completed successfully in 7m58s. Its artifact ZIP is 59,997,441 bytes; local retrieval is still in progress due to slow artifact transfer. The new workflow-verification run `40103139206` was queued on `a624a75a364956cbcd79de786d7323c57db60fd7`; wait for its mandatory touch and timer checks before treating those gates as CI-verified. No phone was connected or written by this audit.
+
 ## A52s TWRP diagnostic rerun (2026-10-24)
 
 Owner reports flashing through TWRP reached the same final visible line. The 17:05:39 photo ends at `SWEET FB: AppleCLCD 1080x2400 stride 4320 at 0xe1000000, default surface 1`; it shows no timer panic or other panic. Because the read-only display image has `sweetlog=0` and USB logging disabled, a still photo cannot distinguish a halt from later quiet boot.
