@@ -1,13 +1,11 @@
-diff --git a/osfmk/arm/arm_init.c b/osfmk/arm/arm_init.c
---- a/osfmk/arm/arm_init.c
-+++ b/osfmk/arm/arm_init.c
-@@ -365,7 +365,9 @@ arm_init(
- 	PE_init_platform(FALSE, args); /* Get platform expert set up */
+diff --git a/pexpert/pexpert/arm64/SWEET.h b/pexpert/pexpert/arm64/SWEET.h
+--- a/pexpert/pexpert/arm64/SWEET.h
++++ b/pexpert/pexpert/arm64/SWEET.h
+@@ -14,5 +14,7 @@
+ #define NO_ECORE                  1
  
- #if __arm64__
-+#if !defined(SWEET)
- 	configure_timer_apple_regs();
-+#endif
- #endif
+ #define SWEET                     1
++/* XNU's timer IRQ path uses Qualcomm's virtual timer on INTID 19. */
++#define SWEET_USE_VIRTUAL_TIMER   1
  
- 	ml_parse_cpu_topology();
+ #define ARM_ARCH_TIMER

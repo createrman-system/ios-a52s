@@ -100,7 +100,7 @@ diff --git a/osfmk/arm64/sweet_early.c b/osfmk/arm64/sweet_early.c
  #include <stdint.h>
  #include <kern/misc_protos.h>
  
--#define EARLY_FB ((volatile uint32_t *)(uintptr_t)0x9c000000)
+-#define EARLY_FB ((volatile uint32_t *)(uintptr_t)0xe1000000)
 +static volatile uint32_t *early_fb = (volatile uint32_t *)(uintptr_t)0xe1000000;
 +#define EARLY_FB early_fb
  #define EARLY_WIDTH 1080u

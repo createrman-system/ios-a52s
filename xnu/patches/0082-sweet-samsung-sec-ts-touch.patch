@@ -115,7 +115,7 @@ index 03defe6..65c9c88 100644
  static bool
  touch_clocks(void)
  {
-@@ -487,6 +570,65 @@ touch_focaltech(void)
+@@ -487,6 +570,62 @@ touch_focaltech(void)
  	return 0;
  }
  
@@ -204,7 +204,7 @@ index 03defe6..65c9c88 100644
  	st.se = ml_io_map(TOUCH_SE_PA, 0x4000);
  	if (!st.gcc || !st.gpio || !st.se) {
  		printf("SWEET TOUCH: MMIO mapping failed\n");
-@@ -572,23 +715,41 @@ touch_thread(void *arg, wait_result_t result)
+@@ -572,23 +715,31 @@ touch_thread(void *arg, wait_result_t result)
  	printf("SWEET TOUCH: TLMM reset=%#x irq=%#x vdd90=%#x; voting L11C through RPMh\n",
  	    touch_rd(st.gpio, TOUCH_GPIO_IO(8)), touch_rd(st.gpio, TOUCH_GPIO_IO(9)),
  	    touch_rd(st.gpio, TOUCH_GPIO_IO(90)));

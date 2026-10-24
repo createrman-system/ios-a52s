@@ -659,3 +659,26 @@ Added patch `0086-sweet-no-physical-timer-access.patch` to skip that CNTP write
 and the per-CPU Apple timer setup for SWEET. Patch validation now passes for
 86 contiguous patches. The fix is not yet CI-built or handset-tested.
 
+## A52s timer panic and patch-series audit (2026-10-24)
+
+Latest device photo again shows XNU panicking at `sleh.c:951` on
+`0xd51be228` (`MSR CNTP_CTL_EL0, x8`). This is the physical-timer mask in
+`osfmk/arm64/machine_routines.c::_enable_virtual_timer()`. The earlier 0086
+patch intended to guard it but had malformed unified-diff hunk counts, so it
+could not be applied reliably.
+
+Corrections made locally:
+- 0085 now defines `SWEET_USE_VIRTUAL_TIMER` in SWEET board config.
+- 0086 uses that flag to skip physical timer programming, including the
+  per-CPU Apple timer setup and the CNTP write in `_enable_virtual_timer()`.
+- Fixed malformed hunk counts in patches 0010 and 0082; corrected 0012's
+  expected framebuffer base from A71 `0x9c000000` to A52s `0xe1000000`.
+
+Evidence: every patch parses with `git apply --stat`; patches 0085 and 0086
+apply cleanly in order to the locally patched XNU source, and the resulting
+`_enable_virtual_timer()` CNTP write is guarded by
+`SWEET_USE_VIRTUAL_TIMER`. No new CI build or handset test has run yet.
+Next: commit/push these corrections, build a fresh kernel from that commit,
+package a new temporary image, and confirm the panic PC advances beyond
+`sleh.c:951`.
+
