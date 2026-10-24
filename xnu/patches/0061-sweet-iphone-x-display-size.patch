@@ -1,6 +1,6 @@
 --- a/iokit/Kernel/arm/SweetFramebuffer.cpp
 +++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
-@@ -61,7 +61,17 @@
+@@ -69,7 +69,17 @@
  #define SWEET_FB_NOTIFY_TYPES           8
  #define SWEET_FB_NOTIFY_VSYNC           5
  #define SWEET_FB_VSYNC_US               16667
@@ -19,7 +19,14 @@
  #define SWEET_FB_FORMAT_BGRA            0x42475241
  
  class IOMobileFramebuffer : public IOService {
-@@ -84,6 +94,8 @@
+@@ -86,13 +96,14 @@
+ 	IOWorkLoop         *fWorkLoop;
+ 	IOTimerEventSource *fVsync;
+ 	uint64_t            fVsyncCount;
+-	bool                fRegistered;
+ 
+ 	static void vsyncFired(OSObject *owner, IOTimerEventSource *sender);
+ 
  public:
  	uint64_t      fPhys;
  	uint32_t      fWidth, fHeight, fRowBytes;
@@ -28,7 +35,22 @@
  	uintptr_t     fPixels;          /* kernel mapping of the panel memory */
  	IOMemoryMap  *fMap;
  	SweetSurface *fSurface;         /* the panel memory as an IOSurface */
-@@ -144,6 +156,16 @@
+@@ -146,6 +157,14 @@
+ 	if (!IOService::start(provider)) {
+ 		return false;
+ 	}
++	/* The timer callback can run as soon as it is scheduled below. */
++	fVsyncCount = 0;
++	fSwapID = 0;
++	fConsolePaused = false;
++	bzero(fPending, sizeof(fPending));
++	fDirty = false;
++	fPowerOff = false;
++	fFadeStep = 0;
+ 	PE_current_console(&video);
+ 	fPhys = video.v_baseAddr;
+ 	fWidth = (uint32_t)video.v_width;
+@@ -155,6 +174,16 @@
  		IOLog("SWEET FB: no boot framebuffer\n");
  		return false;
  	}
@@ -45,18 +67,36 @@
  	fLock = IOLockAlloc();
  	fClients = OSArray::withCapacity(4);
  	fSurface = sweet_surface_create_physical(fPhys, fWidth, fHeight, fRowBytes, SWEET_FB_FORMAT_BGRA);
-@@ -169,8 +191,8 @@
+@@ -179,8 +208,9 @@
+ 	setProperty(kIOUserClientClassKey, "IOMobileFramebufferUserClient");
  	setProperty("external", false);
  	setProperty("DisplayPipePlaneBaseAlignment", 64ULL, 32);
- 	registerService();
 -	IOLog("SWEET FB: AppleCLCD %ux%u stride %u at 0x%llx, default surface %u\n",
 -	    fWidth, fHeight, fRowBytes, fPhys, fSurface->id);
++	registerService();
 +	IOLog("SWEET FB: AppleCLCD %ux%u stride %u at 0x%llx, default surface %u, presented as %ux%u\n",
 +	    fWidth, fHeight, fRowBytes, fPhys, fSurface->id, fLogicalW, fLogicalH);
  	return true;
  }
  
-@@ -309,6 +331,19 @@
+@@ -188,13 +218,11 @@
+ AppleCLCD::vsyncFired(OSObject *owner, IOTimerEventSource *sender)
+ {
+ 	AppleCLCD *fb = (AppleCLCD *)owner;
+-	if (!fb->fRegistered) {
+-		fb->fRegistered = true;
+-		IOLog("SWEET FB: deferred registerService\n");
+-		fb->registerService();
+-	}
+ 	uint64_t now = mach_absolute_time();
+ 	uint64_t count = ++fb->fVsyncCount;
++	if (count == 1) {
++		IOLog("SWEET FB: vsync active\n");
++	}
+ 	uint64_t values[6] = {
+ 		(uint32_t)count, (uint32_t)(count >> 32),
+ 		(uint32_t)now, (uint32_t)(now >> 32),
+@@ -342,6 +370,19 @@
  		if (dx < 0 || dy < 0) {
  			dx = dy = 0;
  		}
@@ -76,7 +116,7 @@
  		if (w > (int32_t)s->width - sx) {
  			w = (int32_t)s->width - sx;
  		}
-@@ -444,8 +479,8 @@
+@@ -477,8 +518,8 @@
  		outCount = 1;
  		break;
  	case kSweetFBGetDisplaySize:

@@ -126,6 +126,18 @@ jobs:
             exit 1
           }
 
+      - name: Verify A52s AppleCLCD startup patch in built kernel
+        if: env.MACHINE_CONFIG == 'SWEET'
+        run: |
+          strings out/kernel.development.sweet | grep -Fq "presented as" || {
+            echo "A52s AppleCLCD logical-display patch missing from the SWEET kernel" >&2
+            exit 1
+          }
+          strings out/kernel.development.sweet | grep -Fq "SWEET FB: vsync active" || {
+            echo "A52s framebuffer vsync startup marker missing from the SWEET kernel" >&2
+            exit 1
+          }
+
       - name: Verify A52s physical timer fault opcode is absent
         if: env.MACHINE_CONFIG == 'SWEET'
         run: |
