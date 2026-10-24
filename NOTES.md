@@ -1,3 +1,15 @@
+## A52s CNTP panic correction and replacement boot image (2026-10-24)
+
+**Handset evidence:** the owner’s boot photo from the prior image shows an undefined-instruction panic at `sleh.c:951`, PC `0xfffffe00074913c8`, instruction `0xd51be228` (`MSR CNTP_CTL_EL0, x8`), followed by nested-panic stall. The earlier successful CI build was insufficient: its kernel contained exactly one copy of that opcode at file offset `0x48d3c8`, matching the panic PC when mapped into `__TEXT`.
+
+**Root cause/fix:** patch 0086 guarded physical timer accesses with `SWEET_USE_VIRTUAL_TIMER`, which was defined in a board header not visible to the timer source compilation unit. The guards now use the build-provided `ARM64_BOARD_CONFIG_SWEET` macro for both `configure_timer_apple_regs()` and the `CNTP_CTL_EL0` write. Pushed commit `165c7aff66ca1e44e0cfecd250fb0827b1653530`. GitHub Actions run `40098198210` passed, including the XNU build and A52s touch-driver check.
+
+**Rebuilt kernel / image:** kernel SHA-256 `e4ad304f43a955930eeb9079a049041391575b9933f18c5a049c84011e9b3253`; exact scan found zero `0xd51be228` instructions. New temporary image: `shim/out/shim-boot-a52s-ci-40098198210.img`, 17,461,248 bytes, SHA-256 `35cdf88d3e6e9c6395d893a5993dceddb5bead73126b4f229c29ecd1d7d15893`. Android boot-v2 header checks and extracted payload/ramdisk hash equality pass. It retains the high-memory ADT and `rd=ufsroot0` command line.
+
+**Next:** this corrected image has not yet been booted on the phone. Use temporary `fastboot boot`; then capture the next panic or milestone. The previous photo also shows the interrupt-controller mapping/debug-interface warnings, which may become the next blocker after the timer panic is cleared. The expected iOS root on `userdata` is unverified; no partition writes were made.
+
+---
+
 ## A52s EL2 handoff and temporary boot image (2026-10-24)
 
 **Pushed source:** commit `274c00a66e0bef33acb8ce0ae6487919794954cd` (`a52s: normalize primary EL2 handoff`) updates the primary CPU EL2-to-EL1 setup and fixes the local patch hunk offsets in 0010/0082. Existing unrelated staged Android trees and files were not included.
