@@ -90,23 +90,37 @@ diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 index ccbb188..777aca4 100644
 --- a/osfmk/arm64/start.s
 +++ b/osfmk/arm64/start.s
-@@ -463,6 +463,44 @@ LEXT(start_first_cpu)
+@@ -463,6 +463,58 @@ LEXT(start_first_cpu)
  	mov		x20, x0
  	mov		x21, #0
  
 +#if defined(SWEET)
-+	/* ABL may enter at EL2. Permit EL1 timer access before XNU writes
-+	 * CNTP_CTL_EL0/CNTV_CTL_EL0, then return to the normal entry path. */
++	/* ABL may enter at EL2. Normalize EL2 before XNU writes timer or GIC
++	 * system registers from EL1, then return to the normal entry path. */
 +	mrs		x1, CurrentEL
 +	and		x1, x1, #0xc
 +	cmp		x1, #0x8
 +	b.ne	Lsweet_primary_el1
++	adrp	x1, EXT(LowExceptionVectorBase)@page
++	add		x1, x1, EXT(LowExceptionVectorBase)@pageoff
++	msr		VBAR_EL2, x1
 +	mov		x1, #(1 << 31)
 +	msr		HCR_EL2, x1
++	msr		VTTBR_EL2, xzr
++	msr		CPTR_EL2, xzr
++	msr		MDCR_EL2, xzr
 +	mov		x1, #3
 +	msr		CNTHCTL_EL2, x1
 +	msr		CNTVOFF_EL2, xzr
-+	msr		CPTR_EL2, xzr
++	/* Enable the GIC system-register interface for the EL1 kernel. */
++	mrs		x1, ICC_SRE_EL2
++	orr		x1, x1, #1
++	orr		x1, x1, #8
++	msr		ICC_SRE_EL2, x1
++	/* SCTLR_EL1 is otherwise unknown on an EL2 entry path. */
++	MOV64	x1, 0x30d00800
++	msr		SCTLR_EL1, x1
++	isb
 +	adrp	x1, Lsweet_primary_el1@page
 +	add		x1, x1, Lsweet_primary_el1@pageoff
 +	msr		ELR_EL2, x1
@@ -135,7 +149,7 @@ index ccbb188..777aca4 100644
  	// Set low reset vector before attempting any loads
  	adrp	x0, EXT(LowExceptionVectorBase)@page
  	add		x0, x0, EXT(LowExceptionVectorBase)@pageoff
-@@ -609,6 +628,23 @@ Lkernelcache_base_found:
+@@ -609,6 +661,23 @@ Lkernelcache_base_found:
  	lsr		x5,  x24, #(ARM_TT_L2_SHIFT)
  	create_bootstrap_mapping x14, x15, x5, x3, x2, x9, x10, x11, x12, x13
  
