@@ -4,7 +4,9 @@
 
 **Fix pushed:** commit `41b71acaa0e141c4c4dd5d42baf7eb075e85ae47` repairs patch 0061 so it applies, registers AppleCLCD synchronously, initializes vsync/swap/console/power state before scheduling the timer, removes the second deferred registration, emits `SWEET FB: vsync active` on the first tick, and sets the intended 1125x2436 logical display geometry. CI now requires both the display geometry and vsync marker strings in the kernel. Patch apply-check against the full patched source from CI run `40103139206` passed. Repository validator passes.
 
-Fresh XNU build and the new marker checks are running as workflow `40104736416`; wait for success before distributing the replacement image. The last known image `a52s-usblog-readonly-40102029579.img` predates this fix and should not be reused for testing this change.
+Fresh XNU CI workflow `40104736416` passed in 5m19s. The log shows patch 0061 applied (no skip warning), and all marker checks passed. Kernel SHA-256: `697d0df52ca769777f6aa5997535c51aaf8de4a524d6bdcbe551166781fe114e`; the compiled binary contains `presented as`, `SWEET FB: vsync active`, and the A52s STM marker, with zero `0xd51be228` timer-fault opcodes.
+
+**Replacement TWRP boot image:** `shim/out/a52s-appleclcd-fix-40104736416.img` (17,461,248 bytes), SHA-256 `497cc6decdae0102fd5d0c3839fc16fc8bf8b2536f8cb9eb3dfb2256fa5c6fdc`. Boot-v2 header and embedded `SWEETXNU` payload were checked. Command line: `debug=0xc cpus=1 keepsyms=1 -v -enable_kprintf_spam -noprogress rd=ufsroot0 sweetlog=0 sweetusb=0`. No `ufsrw=1` or `rootrw=1`; this keeps the patched root path read-only and does not enable persistent logging. It includes the new logical-display startup and timer marker changes. This image has not been flashed or validated on the handset; reaching SpringBoard remains unconfirmed, and a later root/userland blocker may remain.
 
 ## A52s repository audit and CI verification gates (2026-10-24)
 
