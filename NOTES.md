@@ -1,3 +1,32 @@
+## A52s post-timer-NOP boot progress (2026-10-25)
+
+**Owner-reported observation:** temporary image `shim/out/shim-boot-a52s-cnpt-nop.img`
+now passes the previous nested undefined-instruction panic. The screen reported
+SWEET AMFI, platform expert, AppleKeyStore, IOWatchdog, IOCoreSurfaceRoot,
+SWEET HID buttons + touch, SWEET BATTERY static fallback, and AppleCLCD at
+1080x2400 / stride 4320 / `0xe1000000`, then continued through zone/VM/bootstrap
+initialization to `Initializing serial NBP`. This is strong progress relative to
+the earlier panic and matches the configured A52s framebuffer/profile. Provider
+registration does not establish that touch events work; `a52sstmfts=1` remains
+disabled.
+
+**Current image args/hash (observed from its packaging record):**
+`debug=0xc serial=3 keepsyms=1 -noprogress sweettouch=0`; no `a52sstmfts=1`.
+Image SHA-256 `E56391C32CEAD078F88C20B61F3E57FD187ADE2F0DFD55EE7E22DC3DEAB35BD7`.
+The physical-timer `CNTP_CTL_EL0` write is NOP-patched in this diagnostic image.
+
+**Assessment:** no new image is warranted before collecting evidence. Let this
+boot settle, then collect the persistent log read-only from recovery using the
+existing workflow. `serial=3` and `keepsyms=1` are already enabled; adding more
+debug args or changing the CPU count now would confound the first no-panic boot.
+In particular, do not enable the STM driver. The displayed phrase “serial NBP”
+was not found in the repository source and its exact meaning is not established;
+preserve the exact screen text or a photo and the recovered log for analysis.
+No image was rebuilt, no device command was run, and no partition was written
+for this milestone.
+
+---
+
 ## A52s hardware-profile consolidation (2026-10-25)
 
 **Completed (commit `131f836`):** `shim/a52s_profile.h` is now the shared
