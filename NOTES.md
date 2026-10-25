@@ -663,3 +663,13 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
 - Unfinished: A52s framebuffer/GIC/UFS/QUP/touch power mappings, `stm_ts`
   driver port, A52s kernel build, and handset boot validation.
 
+
+## A52s mission audit (2026-10-25)
+
+**Repository state:** local `main` is at `0f06ba1` (`docs: record a52s profile handoff`), two commits ahead of `origin/main` at turn start. The shared A52s profile is already implemented in `shim/a52s_profile.h` and consumed by `tools/mkadt.py`; shim console, loader and MMU use its framebuffer constants. Profile consolidation is commit `131f836`; no kernel CI run was started for it.
+
+**Observed from tracked source:** the remaining device-touch implementation is inherited from A71. `tools/craft_patch.py` and patch stack `xnu/patches/0060-sweet-keys-touch-drivers.patch`, `0062-sweet-touch-power-battery.patch`, `0063-sweet-goodix-geni-packing.patch`, `0082-sweet-samsung-sec-ts-touch.patch`, `0083-a71-touch-gpio-i2c.patch`, and `0084-a71-touch-dvdd-output.patch` retain old chip/bus/power paths. The final stacked patch still does not implement STM FTS5CU56A. `docs/a52s-stm-touch.md` records the replacement boundary and explicitly forbids guessing the Yupik clock/pinctrl sequence.
+
+**Observed hardware profile:** use A55 CPUs 0–3 and A78 CPUs 4–7; GICD/R `0x17a00000` / `0x17a60000`; timer `0x17c20000` / `0x17c21000`, 19.2 MHz; UFS `0x01d84000`, IRQ 297, PHY `0x01d87000`, ICE `0x01d88000`; framebuffer `0xe1000000` / `0x02300000`, 1080×2400, stride 4320; MDSS `0x0ae00000`; STM touch at GENI `0x00a94000`, address `0x49`, GPIO81 input, 4096×4096, PM8350C L7/`ldoc7`. These values are in `docs/a52s-live-hardware.md` and the shared profile. Do not reuse Sweet/A71 address or touch assumptions.
+
+**Next concrete action:** boot the existing high-memory temporary image with `fastboot boot` and collect the persistent SWEET log from recovery. No device boot, flash, CI run, or partition write occurred in this audit. After the log, implement a replacement STM driver with a `0x86` all-events read, persistent ten-slot contact state, and validated 3.0 V `ldoc7` vote. Keep the driver disabled by default until its transport setup is supported by live log/register evidence; Yupik clock and pinctrl offsets remain unobserved.
