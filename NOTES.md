@@ -1,3 +1,33 @@
+## A52s startup-debug trace image (2026-10-25)
+
+**Owner-reported observation:** booting with `kdp_match_name=none` still stops
+in the same broad startup region after zone/VM/bootstrap/scheduler and
+console-related messages. The latest report again has no SWEETLOG header or
+readable strings. It does not identify the exact image filename, so whether
+`shim-boot-a52s-serial-off.img` was tested remains unconfirmed.
+
+**Next diagnostic:** use XNU's built-in `startup_debug=1` tunable. In XNU
+8796.141.3 this enables verbose `kernel_bootstrap` and
+`kernel_bootstrap_thread` markers and startup-hook function/rank traces through
+`kprintf`; it is more actionable than guessing from the last screen line.
+Keep the serial-disabled/video-console configuration and `kdp_match_name=none`
+so this isolates the trace setting. No CPU argument is added: the SWEET CPU
+patch defaults an omitted `cpus` to one. Do not force SWEETLOG earlier; its
+current worker starts after successful SWEET UFS probe and writes into userdata.
+
+**Prepared image:** command line
+`debug=0xc serial=0 keepsyms=1 -noprogress sweettouch=0 kdp_match_name=none startup_debug=1`.
+`a52sstmfts=1` is absent. Reused kernel from CI `40164381626` (SHA-256
+`299B632647116B6F0378927B4FF5B57E5609C7953B2B94A8B653FCF757932A64`), the
+same high-memory ADT, and the same single physical-timer NOP workaround.
+The image ramdisk matches the generated payload. Image
+`shim/out/shim-boot-a52s-startup-debug.img` is 17,461,248 bytes, SHA-256
+`E44486AC208565871BAE1909945436D47A46B9C5E0E3FA48394B8F76F4763F8A`.
+No kernel source changed, so no CI run was needed. It has not been booted and
+no partition was written.
+
+---
+
 ## A52s serial-I/O-off diagnostic image (2026-10-25)
 
 **Owner-reported result:** booting `shim-boot-a52s-kdp-none.img` did not move
