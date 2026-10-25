@@ -1,6 +1,6 @@
 ## A52s hardware-profile consolidation (2026-10-25)
 
-**Completed (local commit pending):** `shim/a52s_profile.h` is now the shared
+**Completed (commit `131f836`):** `shim/a52s_profile.h` is now the shared
 numeric A52s profile. The shim includes it and `tools/mkadt.py` parses it, so
 the physical framebuffer and ADT cannot silently drift. The profile contains
 the locked GIC, timer, UFS host/PHY/ICE/IRQ, framebuffer, MDSS, TLMM and STM
