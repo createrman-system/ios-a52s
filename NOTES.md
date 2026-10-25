@@ -685,3 +685,15 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
 **Validation observed:** `python tools/stmfts_protocol.py` passes; `git diff --check` reports no whitespace errors. No XNU compiler or handset test has yet exercised patch 0085. Yupik clock and pinctrl programming remains intentionally absent because its register sequence has not been observed.
 
 **Next:** commit and push patch 0085/docs/protocol fixtures, dispatch `.github/workflows/xnu.yml` on macOS, inspect the build result and download `xnu-kernel`. Then package the downloaded kernel with a newly generated `--highmem` ADT and prepare a temporary `fastboot boot` image with `a52sstmfts` omitted. Do not flash any partition.
+
+## A52s STM build and temporary image handoff (2026-10-25)
+
+**Committed/pushed:** `c260bbe` (`a52s: add opt-in STM FTS touch driver`) is on `origin/main`. The source adds the standalone STM path and keeps it off unless `a52sstmfts=1` is present. Legacy `sweettouch` now defaults off. The host protocol fixture passes locally.
+
+**Log collection:** recovery read 1025 userdata blocks from `/dev/block/sda34` (4,198,486 bytes). Decoder result: `no SWEETLOG header (log never flushed, or wrong area)`. Raw bytes are at `C:\Users\linux\AppData\Local\Temp\a52s-2026-10-25-area.bin`, outside the repository; no user data was written. This result does not localize the boot stop.
+
+**CI:** run `40164381626`, commit `c260bbea64cd09141155e4cb1961f011fee7bed3`, completed **success** in 7m19s. XNU Build, artifact uploads, and the `Verify A52s STM touch driver in built kernel` workflow step succeeded. The downloaded kernel marker `A52S STM: FTS5CU56A active` is present. An initial push-triggered run `40164262980` and its duplicate manual dispatch `40164266896` were canceled due to the workflow concurrency group; the clean successful run was the subsequent dispatch `40164381626`.
+
+**Packaged:** downloaded artifact `xnu-kernel` (artifact ID `12587289702`). Kernel SHA-256 `299B632647116B6F0378927B4FF5B57E5609C7953B2B94A8B653FCF757932A64`. Generated `shim/out/a52s-40164381626-highmem.adt`, payload `shim/out/a52s-40164381626-payload.bin`, and shim image `shim/out/shim-boot.img` (17,461,248 bytes; SHA-256 `C257B3CEB32FFDEB77489EAB4831AE49BE67E27DECFE4F7D67C7B56DECE904F0`). Payload command line is `debug=0xc serial=3 keepsyms=1 -noprogress sweettouch=0`; `a52sstmfts` is absent, so the new driver is not enabled in this image.
+
+**Boot state:** image was packaged but not sent to the phone. Next human action is the non-destructive temporary boot command `fastboot boot shim/out/shim-boot.img`, then observe the screen and collect another recovery log. No partition was flashed or written. No serials or raw device dumps were added to Git.
