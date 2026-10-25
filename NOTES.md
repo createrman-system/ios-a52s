@@ -1,8 +1,10 @@
 ## A52s explicit read-only UFS root-probe image (2026-10-25)
 
 **Owner-reported observation:** the quiet image (`startup_debug=0`,
-`kdp_match_name=none`) still shows the SWEET registrations and then stops in
-the early IOKit/root transition. The persistent log ring is empty.
+`kdp_match_name=none`) repeatedly stops at the exact final line
+`SWEET FB: AppleCLCD 1080x2400 stride 4320 at 0xe1000000, default surface 1`,
+after the full SWEET registration block. No later message appears after several
+minutes; the persistent log ring is empty. This is now the primary blocker.
 
 **Likely explanation for the empty ring:** the quiet image command line has no
 `rd=ufsroot0`. The SWEET UFS root driver is called from `IOFindBSDRoot` only
@@ -27,7 +29,8 @@ Command line:
 timer NOP and high-memory ADT; payload ramdisk matches the unpacked image.
 Image `shim/out/shim-boot-a52s-root-probe.img` is 17,461,248 bytes, SHA-256
 `CD9B57F856318718BFA651F950A4DCBDADBF8D4E5822B5E4E586C6B1C389103C`.
-No kernel CI run was needed; no partition was written.
+It has not yet been booted. No kernel CI run was needed; no partition was
+written.
 
 ---
 
