@@ -12,3 +12,4 @@ xnu/out-*/
 __pycache__/
 
 build/
+/iosfiles
