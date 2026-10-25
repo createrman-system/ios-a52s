@@ -37,8 +37,10 @@ PM6150 GPIO4 writes, GPIO6/7 bit-bang fallback, a GPIO8 reset pulse and the
 misses actual enter/move records. Patches 0083 and 0084 further modify that
 A71-only path. None may be enabled on A52s.
 
-Patch 0085 must replace, rather than extend, `bsd/dev/sweet_touch.c` after
-those historical patches. Its phase-one scope is intentionally narrow:
+Patch 0085 adds `bsd/dev/sweet_stmfts.c` after the historical patches and
+dispatches to it only with `a52sstmfts=1`. The inherited driver remains
+available behind its separate `sweettouch=1` opt-in, but is disabled by
+default. The first STM implementation has an intentionally narrow scope:
 
 1. Map only GENI `0x00a94000` and TLMM `0x0f000000`; log GENI firmware/FIFO
    state and GPIO81 level before writing either block.
@@ -46,10 +48,9 @@ those historical patches. Its phase-one scope is intentionally narrow:
    their Yupik GCC register offsets have been derived from the target GCC
    driver or observed from an ABL-initialized boot. Do not reconfigure the I²C
    SDA/SCL pinmux until the live A52s pin state is recorded.
-3. Replace `sweet_rpmh_vreg_enable()`'s L11C-only guard with an explicit
-   `ldoc7`, 3000 mV policy. Keep its command-DB lookup and one-transaction
-   safety checks; reject a missing/ambiguous `ldoc7` entry. This is a required
-   code change, not a string substitution.
+3. Extend `sweet_rpmh_vreg_enable()` with an explicit `ldoc7`, 3000 mV policy.
+   Keep its command-DB lookup and one-transaction safety checks; reject a
+   missing/ambiguous `ldoc7` entry.
 4. Treat GPIO81 as input only. A rail vote and its bounded settling delay are
    the reset sequence; no fabricated reset GPIO or PMIC GPIO write is allowed.
 5. Add a GENI combined write/read transfer for command `0x86` and a 256-byte
@@ -60,8 +61,8 @@ those historical patches. Its phase-one scope is intentionally narrow:
    emit one HID frame per stack, and clear the event stack only after an error
    or malformed record. Unknown/status records are logged and ignored.
 
-Before that patch enters CI, the protocol test needs fixtures for a 32-record
-stack, mixed enter/move/leave ordering, empty/controller-ready termination,
-and out-of-range slot/coordinate rejection. The first handset image uses
-`sweettouch=0` by default; the STM probe becomes an explicit opt-in only after
-the persistent boot log is confirmed.
+The protocol fixture covers a full 32-record stack, mixed enter/move/leave
+ordering, a no-event terminator, invalid slots, and the maximum 12-bit
+coordinates. A 12-bit packed coordinate cannot encode a value above 4095.
+The first handset image must omit `a52sstmfts=1`; transport remains opt-in
+until the CI image is built and inherited-state diagnostics have been reviewed.

@@ -1,0 +1,344 @@
+diff --git a/bsd/conf/files b/bsd/conf/files
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -108,5 +108,6 @@
+ bsd/dev/sweet_sample.c			standard
+ bsd/dev/sweet_keys.c			standard
+ bsd/dev/sweet_touch.c			standard
++bsd/dev/sweet_stmfts.c			standard
+ bsd/dev/sweet_rpmh.c			standard
+ bsd/dev/sweet_spmi.c			standard
+diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
+--- a/bsd/dev/sweet_touch.c
++++ b/bsd/dev/sweet_touch.c
+@@ -765,9 +765,16 @@
+ sweet_touch_init(void)
+ {
+-	int enabled = 1;
++	int enabled = 0;
+ 	thread_t thread;
++	int stm_enabled = 0;
++	(void)PE_parse_boot_argn("a52sstmfts", &stm_enabled, sizeof(stm_enabled));
++	if (stm_enabled) {
++		extern void sweet_stmfts_init(void);
++		sweet_stmfts_init();
++		return;
++	}
+ 	if (st.started) {
+ 		return;
+ 	}
+ 	st.started = true;
+ 	(void)PE_parse_boot_argn("sweettouch", &enabled, sizeof(enabled));
+diff --git a/bsd/dev/sweet_rpmh.c b/bsd/dev/sweet_rpmh.c
+--- a/bsd/dev/sweet_rpmh.c
++++ b/bsd/dev/sweet_rpmh.c
+@@ -440,8 +440,12 @@
+ sweet_rpmh_vreg_enable(const char *res, unsigned mv)
+ {
+ 	/* Board-specific helper: do not apply PMIC5-LDO policy to arbitrary resources. */
+-	if (!res || strcmp(res, "ldoc11") || mv < 2950 || mv > 3400) {
+-		printf("SWEET RPMH: expected ldoc11 and 2950..3400 mV\n");
++	bool a52s_ldo7 = res && !strcmp(res, "ldoc7");
++	bool sweet_ldo11 = res && !strcmp(res, "ldoc11");
++	if ((!a52s_ldo7 && !sweet_ldo11) ||
++	    (a52s_ldo7 && mv != 3000) ||
++	    (sweet_ldo11 && (mv < 2950 || mv > 3400))) {
++		printf("SWEET RPMH: expected ldoc7 at 3000 mV or ldoc11 at 2950..3400 mV\n");
+ 		return EINVAL;
+ 	}
+ 	if (__atomic_exchange_n(&rh_lock, 1, __ATOMIC_ACQUIRE)) {
+diff --git a/bsd/dev/sweet_stmfts.c b/bsd/dev/sweet_stmfts.c
+new file mode 100644
+--- /dev/null
++++ b/bsd/dev/sweet_stmfts.c
+@@ -0,0 +1,290 @@
++/*
++ * Samsung Galaxy A52s STM FTS5CU56A touch path.
++ * Enabled only by a52sstmfts=1. ABL owns GENI clocks and pinctrl; this
++ * driver records their inherited state and does not write guessed offsets.
++ */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <sys/errno.h>
++#include <kern/clock.h>
++#include <kern/thread.h>
++#include <kern/sched_prim.h>
++#include <machine/machine_routines.h>
++#include <pexpert/pexpert.h>
++
++extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
++extern kern_return_t thread_terminate(thread_t);
++extern int sweet_rpmh_vreg_enable(const char *, unsigned);
++extern void sweet_hid_touch(int finger, int down, int x, int y);
++
++#define STM_GENI_PA       0x00a94000u
++#define STM_TLMM_PA       0x0f000000u
++#define STM_I2C_ADDR      0x49u
++#define STM_IRQ_GPIO      81u
++#define STM_MAX_FINGERS   10u
++#define STM_MAX_EVENTS    32u
++#define STM_EVENT_SIZE    8u
++#define STM_READ_ALL      0x86u
++#define STM_SENSE_ON      0x93u
++#define STM_CLEAR_STACK   0xa1u
++
++#define GPIO_CFG(n)       ((uint32_t)(n) * 0x1000u)
++#define GPIO_IO(n)        (GPIO_CFG(n) + 4u)
++#define SE_STATUS         0x040u
++#define SE_FW             0x068u
++#define SE_IRQ            0x610u
++#define SE_IRQ_CLR        0x618u
++#define SE_CMD            0x600u
++#define SE_TX_LEN         0x26cu
++#define SE_RX_LEN         0x270u
++#define SE_TX             0x700u
++#define SE_RX             0x780u
++#define SE_TX_COUNT       0x800u
++#define SE_RX_COUNT       0x804u
++#define SE_HW_TX          0xe24u
++#define SE_HW_RX          0xe28u
++#define SE_DONE           (1u << 0)
++#define SE_NACK           (1u << 10)
++#define SE_ERRORS         (0x0eu | (1u << 9) | (1u << 10) | (1u << 12) | \
++                           (1u << 13) | (3u << 24) | (3u << 28))
++#define STM_STACK_BYTES   (STM_MAX_EVENTS * STM_EVENT_SIZE)
++
++static vm_offset_t stm_se, stm_gpio;
++static int stm_sleep_chan;
++static bool stm_dead, stm_started;
++static uint16_t stm_active;
++static int stm_x[STM_MAX_FINGERS], stm_y[STM_MAX_FINGERS];
++static uint32_t stm_irq;
++
++static uint32_t
++stm_rd(vm_offset_t base, uint32_t off)
++{
++	uint32_t v = *(volatile uint32_t *)(base + off);
++	__asm__ volatile("dmb oshld" ::: "memory");
++	return v;
++}
++
++static void
++stm_wr(vm_offset_t base, uint32_t off, uint32_t val)
++{
++	__asm__ volatile("dmb oshst" ::: "memory");
++	*(volatile uint32_t *)(base + off) = val;
++	__asm__ volatile("dsb osh" ::: "memory");
++}
++
++static void
++stm_wait(unsigned ms)
++{
++	uint64_t deadline;
++	clock_interval_to_deadline(ms, NSEC_PER_MSEC, &deadline);
++	(void)assert_wait_deadline(&stm_sleep_chan, THREAD_UNINT, deadline);
++	thread_block(THREAD_CONTINUE_NULL);
++}
++
++static bool
++stm_wait_clear(uint32_t off, uint32_t mask)
++{
++	for (unsigned i = 0; i < 5000; ++i) {
++		if (!(stm_rd(stm_se, off) & mask)) return true;
++		delay(1);
++	}
++	return false;
++}
++
++static void
++stm_abort(void)
++{
++	stm_wr(stm_se, 0x604u, 2u);
++	bool done = false;
++	for (unsigned i = 0; i < 5000; ++i) {
++		if (stm_rd(stm_se, SE_IRQ) & (1u << 5)) { done = true; break; }
++		delay(1);
++	}
++	if (!done || !stm_wait_clear(SE_STATUS, 1u)) {
++		stm_dead = true;
++		printf("A52S STM: GENI abort failed status=%#x irq=%#x\n",
++		    stm_rd(stm_se, SE_STATUS), stm_rd(stm_se, SE_IRQ));
++	}
++	for (unsigned i = 0; i < 64 &&
++	    (stm_rd(stm_se, SE_RX_COUNT) & 0x1ffffffu); ++i) (void)stm_rd(stm_se, SE_RX);
++	stm_wr(stm_se, SE_IRQ_CLR, 0xffffffffu);
++}
++
++/* One bounded GENI FIFO message; at most 3 TX bytes or 256 RX bytes. */
++static int
++stm_msg(const uint8_t *tx, unsigned nt, uint8_t *rx, unsigned nr, bool stretch)
++{
++	if (stm_dead || nt > 3u || nr > STM_STACK_BYTES ||
++	    (nt && nr) || (!nt && !nr)) return EIO;
++	if (!stm_wait_clear(SE_STATUS, 1u)) { stm_dead = true; return EBUSY; }
++	stm_wr(stm_se, SE_IRQ_CLR, 0xffffffffu);
++	stm_wr(stm_se, nr ? SE_RX_LEN : SE_TX_LEN, nr ? nr : nt);
++	stm_wr(stm_se, SE_CMD, ((nr ? 2u : 1u) << 27) |
++	    (STM_I2C_ADDR << 9) | (stretch ? 4u : 0u));
++	unsigned sent = 0, got = 0;
++	int err = ETIMEDOUT;
++	for (unsigned i = 0; i < 20000; ++i) {
++		uint32_t irq = stm_rd(stm_se, SE_IRQ);
++		stm_irq = irq;
++		if (irq & SE_ERRORS) {
++			err = (irq & SE_NACK) ? ENXIO : EIO;
++			for (unsigned j = 0; j < 5000 && !(irq & SE_DONE); ++j) {
++				delay(1); irq = stm_rd(stm_se, SE_IRQ);
++			}
++			if ((irq & SE_DONE) && !(stm_rd(stm_se, SE_STATUS) & 1u) &&
++			    !(stm_rd(stm_se, SE_TX_COUNT) & 0xfffffffu) &&
++			    !(stm_rd(stm_se, SE_RX_COUNT) & 0x1ffffffu)) {
++				stm_wr(stm_se, SE_IRQ_CLR, irq); return err;
++			}
++			break;
++		}
++		if (nt && !sent && (irq & (1u << 30))) {
++			uint32_t word = 0;
++			for (unsigned j = 0; j < nt; ++j) word |= (uint32_t)tx[j] << (8u * j);
++			stm_wr(stm_se, SE_TX, word); sent = nt;
++		}
++		uint32_t count = stm_rd(stm_se, SE_RX_COUNT) & 0x1ffffffu;
++		if (count > 64u) { err = EIO; break; }
++		while (count--) {
++			uint32_t word = stm_rd(stm_se, SE_RX);
++			for (unsigned j = 0; j < 4 && got < nr; ++j) rx[got++] = (uint8_t)(word >> (8u*j));
++		}
++		if (irq & SE_DONE) {
++			stm_wr(stm_se, SE_IRQ_CLR, irq);
++			return (got == nr && sent == nt) ? 0 : EIO;
++		}
++		stm_wr(stm_se, SE_IRQ_CLR, irq & ((1u << 26) | (1u << 27) | (1u << 30)));
++		delay(1);
++	}
++	stm_abort();
++	return err;
++}
++
++static int
++stm_read_stack(uint8_t *buf)
++{
++	const uint8_t command = STM_READ_ALL;
++	int err = stm_msg(&command, 1, NULL, 0, true);
++	if (err) return err;
++	return stm_msg(NULL, 0, buf, STM_STACK_BYTES, false);
++}
++
++static int
++stm_command(uint8_t command)
++{
++	return stm_msg(&command, 1, NULL, 0, false);
++}
++
++static void
++stm_report(uint16_t mask, const int *x, const int *y)
++{
++	for (unsigned id = 0; id < STM_MAX_FINGERS; ++id) {
++		uint16_t bit = (uint16_t)(1u << id);
++		if (mask & bit) {
++			if (!(stm_active & bit) || x[id] != stm_x[id] || y[id] != stm_y[id])
++				sweet_hid_touch((int)id, 1, x[id], y[id]);
++			stm_x[id] = x[id]; stm_y[id] = y[id];
++		} else if (stm_active & bit) {
++			sweet_hid_touch((int)id, 0, stm_x[id], stm_y[id]);
++		}
++	}
++	stm_active = mask;
++}
++
++static void
++stm_clear_after_fault(void)
++{
++	int e = stm_command(STM_CLEAR_STACK);
++	printf("A52S STM: clear event stack err=%d\n", e);
++}
++
++static bool
++stm_decode_stack(const uint8_t *buf)
++{
++	uint16_t mask = stm_active;
++	int x[STM_MAX_FINGERS], y[STM_MAX_FINGERS];
++	for (unsigned i = 0; i < STM_MAX_FINGERS; ++i) { x[i] = stm_x[i]; y[i] = stm_y[i]; }
++	bool any = false, malformed = false;
++	for (unsigned n = 0; n < STM_MAX_EVENTS; ++n) {
++		const uint8_t *e = buf + n * STM_EVENT_SIZE;
++		if (e[0] == 0) break;
++		unsigned type = e[0] & 0x0fu;
++		if (type == 0x02u) continue; /* detection only; no coordinates */
++		if (type != 0x03u && type != 0x04u && type != 0x05u) {
++			printf("A52S STM: ignored status/unknown event type=%#x\n", type);
++			continue;
++		}
++		unsigned id = (e[0] >> 4) & 0x0fu;
++		unsigned raw_x = e[1] | ((unsigned)(e[2] & 0x0fu) << 8);
++		unsigned raw_y = (e[2] >> 4) | ((unsigned)e[3] << 4);
++		if (id >= STM_MAX_FINGERS || raw_x > 4095u || raw_y > 4095u) {
++			malformed = true; break;
++		}
++		any = true;
++		if (type == 0x04u) { mask &= (uint16_t)~(1u << id); continue; }
++		mask |= (uint16_t)(1u << id);
++		x[id] = (int)((raw_x * 1079u) / 4095u);
++		y[id] = (int)((raw_y * 2399u) / 4095u);
++	}
++	if (malformed) {
++		printf("A52S STM: malformed/unterminated event stack\n");
++		stm_clear_after_fault();
++		return false;
++	}
++	if (any) stm_report(mask, x, y);
++	return true;
++}
++
++static void
++stm_thread(void *arg, wait_result_t result)
++{
++	(void)arg; (void)result;
++	stm_se = ml_io_map(STM_GENI_PA, 0x4000u);
++	stm_gpio = ml_io_map(STM_TLMM_PA, 0x100000u);
++	if (!stm_se || !stm_gpio) {
++		printf("A52S STM: GENI/TLMM map failed\n"); goto out;
++	}
++	/* Read-only snapshot first: no guessed clock, pinctrl, or GPIO writes. */
++	printf("A52S STM: preflight GENI fw=%#x status=%#x irq=%#x tx=%#x rx=%#x hwtx=%#x hwrx=%#x GPIO81=%#x cfg36=%#x cfg37=%#x cfg81=%#x\n",
++	    stm_rd(stm_se, SE_FW), stm_rd(stm_se, SE_STATUS), stm_rd(stm_se, SE_IRQ),
++	    stm_rd(stm_se, SE_TX_COUNT), stm_rd(stm_se, SE_RX_COUNT),
++	    stm_rd(stm_se, SE_HW_TX), stm_rd(stm_se, SE_HW_RX),
++	    stm_rd(stm_gpio, GPIO_IO(STM_IRQ_GPIO)) & 1u,
++	    stm_rd(stm_gpio, GPIO_CFG(36)), stm_rd(stm_gpio, GPIO_CFG(37)),
++	    stm_rd(stm_gpio, GPIO_CFG(STM_IRQ_GPIO)));
++	int power = sweet_rpmh_vreg_enable("ldoc7", 3000u);
++	if (power) { printf("A52S STM: ldoc7 3000mV vote failed %d; stopping\n", power); goto out; }
++	stm_wait(80);
++	int sense = stm_command(STM_SENSE_ON);
++	if (sense) { printf("A52S STM: SENSE_ON failed %d\n", sense); goto out; }
++	printf("A52S STM: FTS5CU56A active; READ_ALL_EVENT polling every 10ms\n");
++	while (!stm_dead) {
++		uint8_t stack[STM_STACK_BYTES] = {0};
++		int err = stm_read_stack(stack);
++		if (err) {
++			printf("A52S STM: READ_ALL_EVENT failed %d irq=%#x GPIO81=%u\n",
++			    err, stm_irq, stm_rd(stm_gpio, GPIO_IO(STM_IRQ_GPIO)) & 1u);
++			stm_clear_after_fault();
++		} else if (!stm_decode_stack(stack)) {
++			/* decoder already cleared the malformed stack */
++		}
++		stm_wait(10);
++	}
++out:
++	stm_report(0, stm_x, stm_y);
++	(void)thread_terminate(current_thread());
++	thread_block(THREAD_CONTINUE_NULL);
++}
++
++void
++sweet_stmfts_init(void)
++{
++	if (stm_started) return;
++	stm_started = true;
++	thread_t thread;
++	kern_return_t kr = kernel_thread_start(stm_thread, NULL, &thread);
++	if (kr == KERN_SUCCESS) thread_deallocate(thread);
++	else printf("A52S STM: kernel_thread_start failed %d\n", kr);
++}
++#endif /* ARM64_BOARD_CONFIG_SWEET */

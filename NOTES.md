@@ -673,3 +673,15 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
 **Observed hardware profile:** use A55 CPUs 0–3 and A78 CPUs 4–7; GICD/R `0x17a00000` / `0x17a60000`; timer `0x17c20000` / `0x17c21000`, 19.2 MHz; UFS `0x01d84000`, IRQ 297, PHY `0x01d87000`, ICE `0x01d88000`; framebuffer `0xe1000000` / `0x02300000`, 1080×2400, stride 4320; MDSS `0x0ae00000`; STM touch at GENI `0x00a94000`, address `0x49`, GPIO81 input, 4096×4096, PM8350C L7/`ldoc7`. These values are in `docs/a52s-live-hardware.md` and the shared profile. Do not reuse Sweet/A71 address or touch assumptions.
 
 **Next concrete action:** boot the existing high-memory temporary image with `fastboot boot` and collect the persistent SWEET log from recovery. No device boot, flash, CI run, or partition write occurred in this audit. After the log, implement a replacement STM driver with a `0x86` all-events read, persistent ten-slot contact state, and validated 3.0 V `ldoc7` vote. Keep the driver disabled by default until its transport setup is supported by live log/register evidence; Yupik clock and pinctrl offsets remain unobserved.
+
+## A52s STM implementation handoff (2026-10-25)
+
+**Pushed base:** commits `131f836`, `0f06ba1`, and `13f9304` were pushed to `origin/main` (`d240501..13f9304`).
+
+**Observed log result:** A52s serial `RZCRA0BJRRV` was connected in TWRP recovery. Read-only collection copied the last 1025 userdata blocks (4,198,486 bytes) to the Windows temp directory, outside the repository. `tools/sweet-log.py` reported `no SWEETLOG header`; there is no decoded persistent XNU log for that boot. Existing shim outputs are dated 2026-10-23, so their filename does not establish they are the latest boot image.
+
+**Implementation prepared locally:** new patch `xnu/patches/0085-a52s-stm-touch.patch` adds `sweet_stmfts.c`, routes it only for `a52sstmfts=1`, and changes legacy `sweettouch` to default off. It logs GENI and TLMM inherited state before touching the controller, makes no clock/pinctrl/reset writes, votes `ldoc7` at exactly 3000 mV through the existing guarded RPMh transaction, starts STM sensing, reads the bounded 256-byte `0x86` event stack, handles enter/motion/leave with persistent ten-slot state, and clears only on transport/protocol faults. `docs/a52s-stm-touch.md` now reflects this patch boundary. The host protocol fixture covers mixed events, a full 32-record stack, terminator, invalid slot, maximum 12-bit coordinates and oversized stack.
+
+**Validation observed:** `python tools/stmfts_protocol.py` passes; `git diff --check` reports no whitespace errors. No XNU compiler or handset test has yet exercised patch 0085. Yupik clock and pinctrl programming remains intentionally absent because its register sequence has not been observed.
+
+**Next:** commit and push patch 0085/docs/protocol fixtures, dispatch `.github/workflows/xnu.yml` on macOS, inspect the build result and download `xnu-kernel`. Then package the downloaded kernel with a newly generated `--highmem` ADT and prepare a temporary `fastboot boot` image with `a52sstmfts` omitted. Do not flash any partition.

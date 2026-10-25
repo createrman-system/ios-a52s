@@ -50,6 +50,8 @@ def decode_event(event: bytes) -> Contact | None:
 def decode_stack(data: bytes) -> list[Contact]:
     if len(data) % EVENT_SIZE:
         raise ValueError("event stack is not aligned to 8-byte events")
+    if len(data) > 32 * EVENT_SIZE:
+        raise ValueError("READ_ALL_EVENT returns at most 32 records")
     contacts = []
     for i in range(0, len(data), EVENT_SIZE):
         event = data[i:i + EVENT_SIZE]
@@ -82,6 +84,20 @@ def _self_test() -> None:
         Contact(2, 0x422, 0x765, 8, 6, 10, 0xFD, True),
         Contact(2, 0, 0, 0, 0, 0, 0, False),
     ]
+
+    # A full READ_ALL_EVENT stack can use all 32 records without a spare terminator.
+    full = b"".join(bytes([0x13, i & 0xff, 0, 0, 1, 1, 0, 1])
+                    for i in range(32))
+    assert len(decode_stack(full)) == 32
+    assert decode_event(bytes([0xA3, 0xff, 0xff, 0xff, 1, 1, 0, 1])) is None
+    edge = decode_event(bytes([0x13, 0xff, 0xff, 0xff, 1, 1, 0, 1]))
+    assert edge is not None and edge.x == 4095 and edge.y == 4095
+    try:
+        decode_stack(bytes(33 * EVENT_SIZE))
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("oversized STM event stack was accepted")
 
 
 if __name__ == "__main__":
