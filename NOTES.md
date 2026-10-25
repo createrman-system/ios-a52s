@@ -1,3 +1,33 @@
+## A52s startup trace confirmed IOKit entry (2026-10-25)
+
+**Owner-reported observation:** with the startup-debug image, the display was
+flooded by `kernel_startup_initialize_upto, rank ...` lines, then showed
+`kernel_bootstrap: PE_init_iokit` and the full SWEET registration block through
+AppleCLCD at `0xe1000000`. This confirms the trace is active and XNU reaches
+IOKit/provider initialization. It does not establish that the phone reached
+idle; verbose synchronous framebuffer output may itself make this phase slow.
+The persistent userdata ring still has no SWEETLOG header.
+
+**Prepared quiet comparison image:** same kernel, high-memory ADT, timer-NOP
+workaround, serial-off and KDP-none settings, but `startup_debug=0` to suppress
+the per-hook function/rank flood. Boot args:
+`debug=0xc serial=0 keepsyms=1 -noprogress sweettouch=0 kdp_match_name=none startup_debug=0`.
+`a52sstmfts=1` remains absent. Kernel SHA-256 is unchanged at
+`299B632647116B6F0378927B4FF5B57E5609C7953B2B94A8B653FCF757932A64`; payload
+ramdisk matches the unpacked image. Image `shim/out/shim-boot-a52s-quiet.img`
+is 17,461,248 bytes, SHA-256
+`F42CB091A708A76F519BB8B509DD2280B7743B64914463CA4A01613E80F4EA3F`.
+No CI run was needed and no partition was written.
+
+**Next:** temporary-boot the quiet image and allow the same settling interval.
+If the normal SWEET registration lines are followed by later progress, the
+verbose trace was obscuring or slowing observation. If it still stops, record
+the exact last line; then add a narrow framebuffer marker after the last
+confirmed IOKit/startup boundary through the normal macOS CI build. Keep the
+STM driver disabled.
+
+---
+
 ## A52s startup-debug trace image (2026-10-25)
 
 **Owner-reported observation:** booting with `kdp_match_name=none` still stops
