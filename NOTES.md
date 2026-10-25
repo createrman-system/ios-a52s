@@ -1,3 +1,36 @@
+## A52s explicit read-only UFS root-probe image (2026-10-25)
+
+**Owner-reported observation:** the quiet image (`startup_debug=0`,
+`kdp_match_name=none`) still shows the SWEET registrations and then stops in
+the early IOKit/root transition. The persistent log ring is empty.
+
+**Likely explanation for the empty ring:** the quiet image command line has no
+`rd=ufsroot0`. The SWEET UFS root driver is called from `IOFindBSDRoot` only
+when that root name is selected; without it, XNU follows `/chosen` root
+matching or its default HFS matching instead. Thus there may have been no
+SWEET UFS probe and no opportunity to start the SWEET logger. The logger also
+deliberately returns when `ufsrw` is
+absent because it writes to userdata; do not enable `ufsrw=1` for this test.
+
+**Prepared next image:** add only `rd=ufsroot0` to the quiet boot arguments.
+This explicitly exercises the existing SWEET UFS root path, which reads the
+`userdata` GPT entry and exposes it read-only by default. No `ufsrw=1` or
+`rootrw=1` is present, so the test does not authorize or enable userdata
+writes. Expected evidence is a `SWEET UFS: ... read-only` line followed by
+`BSD root: ufsroot0`; a UFS error or root mount failure is still useful
+evidence and does not require flashing. Because this boot remains read-only,
+the persistent SWEET logger is expected to remain off even if probing works.
+
+Command line:
+`debug=0xc serial=0 keepsyms=1 -noprogress sweettouch=0 kdp_match_name=none startup_debug=0 rd=ufsroot0`.
+`a52sstmfts=1` remains absent. Reused CI kernel `40164381626` with the same
+timer NOP and high-memory ADT; payload ramdisk matches the unpacked image.
+Image `shim/out/shim-boot-a52s-root-probe.img` is 17,461,248 bytes, SHA-256
+`CD9B57F856318718BFA651F950A4DCBDADBF8D4E5822B5E4E586C6B1C389103C`.
+No kernel CI run was needed; no partition was written.
+
+---
+
 ## A52s startup trace confirmed IOKit entry (2026-10-25)
 
 **Owner-reported observation:** with the startup-debug image, the display was
