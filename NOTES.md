@@ -1,3 +1,43 @@
+## A52s boot stall: serial KDP isolation image (2026-10-25)
+
+**Owner-reported observation:** the temporary timer-NOP image settled at the
+console line reported as `Initializing serial NBP`; no later display progress
+appeared after several minutes. The second read of the last 4 MiB of userdata
+(`logs/a52s-boot-2026-10-25-settle.bin`, 4,198,400 bytes) still has no
+`SWEETLOG` header or readable strings. This raw device dump remains untracked.
+
+**Source finding:** the exact XNU 8796.141.3 string is `Initializing serial
+KDP`, not NBP. In `osfmk/kdp/kdp_udp.c`, `kdp_init()` prints that marker and
+registers the serial KDP callbacks, then assigns its synthetic serial IP/MAC.
+This makes a KDP/console interaction a testable hypothesis, but the last
+visible line does not prove execution stopped inside KDP. The persistent UFS
+logger starts only after SWEET UFS probe succeeds; no header is compatible
+with the UFS logger not having started or flushed (and does not localize the
+stall by itself).
+
+**Prepared reversible diagnostic image:** add `kdp_match_name=none` while
+retaining `serial=3`; the XNU 8796.141.3 arm64 KDP setup returns early for an
+explicit non-serial `kdp_match_name`, while the separate serial console mode
+remains enabled. This isolates KDP serial selection without changing CPU
+count, timer NOP workaround, framebuffer, or touch setup. Command line:
+`debug=0xc serial=3 keepsyms=1 -noprogress sweettouch=0 kdp_match_name=none`.
+The STM opt-in is absent. Reused kernel from CI run `40164381626` (SHA-256
+`299B632647116B6F0378927B4FF5B57E5609C7953B2B94A8B653FCF757932A64`), same
+high-memory ADT, and same single `CNTP_CTL_EL0` NOP patch. Payload equals the
+unpacked image ramdisk. Image `shim/out/shim-boot-a52s-kdp-none.img` is
+17,461,248 bytes, SHA-256
+`9A2DCC7E8A237CB4C7D50A613636F7DBD59771B51973817B8466F32104EAB9F8`.
+No kernel source changed, so no CI run was needed. No device command or
+partition write was performed.
+
+**Next:** temporary boot the diagnostic image. Capture the exact final text
+(photo if practical) and allow several minutes. If the line moves forward,
+KDP serial selection was implicated; if not, continue from the next actual
+kernel source boundary rather than assuming the last printed message is the
+faulting operation. Keep `a52sstmfts=1` disabled.
+
+---
+
 ## A52s post-timer-NOP boot progress (2026-10-25)
 
 **Owner-reported observation:** temporary image `shim/out/shim-boot-a52s-cnpt-nop.img`
