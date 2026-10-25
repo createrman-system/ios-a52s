@@ -17,38 +17,22 @@ plus the A52s TWRP tree under `GalaxyA52sFolders/`. Those trees identify:
 
 ## Port status
 
-The first A52s handset evidence is now available: model `SM-A528B`, boot
-device `1d84000.ufshc`, and the supplied platform map reports GICD
-`0x17a00000`, GICR `0x17a60000`, a 19.2 MHz timer, UFS `0x01d84000` IRQ 265,
-framebuffer `0x9c000000`, MDSS `0xae000000`, and an STM touchscreen at I2C
-address `0x49` on SE8 at `0x00a94000`.
+The A52s has passed early XNU platform initialization with the high-memory
+payload and timer-access workaround. The screen subsequently remains static;
+the next diagnostic is the persistent log collected from recovery after a
+temporary boot. No partition write is required or authorized for this step.
 
-The live `/proc/iomem` confirms UFS `0x01d84000–0x01d86fff`, UFS PHY at
-`0x01d87000`, UFS ICE at `0x01d88000`, DWC3 at `0x0a600000`, and pinctrl at
-`0x0f000000`. Root ADB access is available. The captured device-tree archive
-was produced through a Windows shell redirection and is not a valid binary
-tarball, so a raw DTB pull is still needed.
+The live `SM-A528B` evidence is recorded in
+[`a52s-live-hardware.md`](a52s-live-hardware.md). In particular, the splash
+reservation is `0xe1000000` / `0x02300000` (not the Sweet/A71 `0x9c000000`),
+UFS is `0x01d84000` on IRQ 297, and the panel is 1080×2400 command mode.
 
-The ADT identity/CPU profile now reflects SM7325/Kryo 670 and the shim/UFS
-comments identify the A52s addresses. The touch driver is deliberately not
-switched from the old S6SY771 implementation yet: A52s uses STM `stm_ts`, so
-it needs a separate protocol and power-sequencing implementation.
-
-The XNU port currently still contains the proven Sweet/A71 low-level driver
-implementation. It is not A52s-ready yet. The following values must be read
-from an A52s booted in recovery/Download mode or from a live A52s device tree
-before a kernel image is tested:
-
-1. bootloader-provided framebuffer base, stride, format and reserved size;
-2. GIC distributor/redistributor addresses and timer frequency;
-3. UFS controller base and interrupt;
-4. QUP/GENI serial-engine base and the `stm_ts` bus/address;
-5. touch reset, IRQ and regulator GPIOs;
-6. RAM banks and Qualcomm reserved-memory/XPU carve-outs.
-
-The existing `0x9c000000` framebuffer, SM7150 MMIO addresses, A71 S6SY771
-driver, and A71 GPIO numbers are therefore reference values only. They must not
-be used for A52s flashing.
+The current XNU touch patch is only an incomplete conversion: it still carries
+the A71 SE7, PM6150/L11C, reset and `sec_ts` assumptions. It must be replaced
+by an STM FTS5CU56A path for `qcom,i2c-geni@0x00a94000`, address `0x49`, IRQ
+GPIO 81, and PM8350C LDO7. The A52s DT specifies no reset GPIO and explicitly
+marks DVDD unused, so neither an A71 reset pulse nor its PMIC-GPIO writes are
+valid on this handset.
 
 ## Bring-up order
 

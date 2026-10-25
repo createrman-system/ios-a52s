@@ -1,3 +1,35 @@
+## A52s hardware-profile consolidation (2026-10-25)
+
+**Completed (local commit pending):** `shim/a52s_profile.h` is now the shared
+numeric A52s profile. The shim includes it and `tools/mkadt.py` parses it, so
+the physical framebuffer and ADT cannot silently drift. The profile contains
+the locked GIC, timer, UFS host/PHY/ICE/IRQ, framebuffer, MDSS, TLMM and STM
+touch values. `mkadt.py` now emits UFS IRQ 297 plus PHY/ICE bases.
+
+**Observed:** generated ADT check passes for framebuffer `0xe1000000` / size
+`0x02300000`, UFS `0x01d84000` / size `0x3000`, PHY `0x01d87000`, ICE
+`0x01d88000`, and IRQ 297. `tools/stmfts_protocol.py` passes, including a
+mixed STM enter/move/leave stack and no-event terminator. Captured CPU IDs are
+four Cortex-A55 (CPUs 0-3, MIDR part `0xd05`) and four Cortex-A78 (CPUs 4-7,
+part `0xd41`); the ADT retains its intentionally single XNU scheduling
+cluster until the SMP driver has an AMP audit.
+
+**Observed touch defect:** the final source produced by patches 0060–0084 is
+not an A52s driver. It retains the A71 SE7 base `0xa84000`, old GCC/PM6150
+writes, GPIO6/7 bit-bang code and a GPIO8 reset pulse. Its `sec_ts` decoder
+treats STM event `0x02` as contact data and therefore misses `0x03` enter and
+`0x05` motion. Do not enable it on A52s.
+
+**Next concrete action:** boot the existing high-memory temporary image and
+pull the persistent log in recovery before any further driver CI work. Then
+write a replacement (not incremental) STM driver: GENI `0xa94000`, STM read
+all-events `0x86`, GPIO81 input only, and an RPMh `ldoc7` 3000 mV vote. The
+Yupik GCC/pinctrl register write sequence remains unobserved; do not guess it.
+No partition was written, no device was booted, and no GitHub Actions run was
+started during this consolidation.
+
+---
+
 ## A52s shim fbcon-clear fix (2026-10-23)
 
 **State:** CI run 39921184845 kernel booted to "JUMP" then screen blanked — XNU's early fbcon initialiser cleared the shim debug output.

@@ -1,10 +1,13 @@
 #pragma once
 #include <stdint.h>
+#include "a52s_profile.h"
 
-#define FB_BASE		0xe1000000UL	/* A52s live-DT cont_splash_region */
-#define FB_W		1080
-#define FB_H		2400
-#define FB_STRIDE	(FB_W * 4)	/* a8r8g8b8, matches mainline simplefb */
+#define FB_BASE		A52S_FB_BASE
+#define FB_W		A52S_FB_WIDTH
+#define FB_H		A52S_FB_HEIGHT
+#define FB_STRIDE	A52S_FB_STRIDE	/* a8r8g8b8, matches live splash */
+
+_Static_assert(FB_STRIDE == FB_W * 4, "A52s splash format must stay XRGB8888");
 
 #define RED	0xffff0000U
 #define BLUE	0xff0000a0U

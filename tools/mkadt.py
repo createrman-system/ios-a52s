@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Build the minimal Apple Device Tree that the SWEET xnu needs to boot.
+"""Build the minimal Apple Device Tree that the A52s XNU port needs to boot.
 
-Only what the early boot path actually reads (see NOTES.md); every MMIO
-address comes from the sweet live FDT. Usage:  mkadt.py OUT.adt [--dump] [--qemu] [--highmem]
+The physical A52s values are read from shim/a52s_profile.h so the shim and
+generated ADT cannot silently diverge.  QEMU keeps its own explicit override.
+Usage: mkadt.py OUT.adt [--dump] [--qemu] [--highmem]
 """
-import hashlib, os, struct, sys
+import hashlib, os, re, struct, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import adt  # noqa: E402
@@ -23,17 +24,38 @@ PANIC_LOG_SIZE = 0x100000
 # carve-out is in the low bank and the dynamic pools are limited below 4G.
 HIGH_PHYS_BASE = 0x100000000
 HIGH_MEM_SIZE = 0xc0000000
-# /arm-io children are relative to this; it must not be 0 (serial_init bails)
-SOC_BASE = 0x01000000
+def a52s_profile_value(name):
+    """Read an integer #define from the profile shared with the shim."""
+    header = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          '../shim/a52s_profile.h')
+    source = open(header, encoding='ascii').read()
+    match = re.search(r'^\s*#define\s+' + re.escape(name) +
+                      r'\s+(0x[0-9a-fA-F]+|[0-9]+)[uUlL]*\b',
+                      source, re.MULTILINE)
+    if not match:
+        raise SystemExit(f'{header}: missing numeric {name}')
+    return int(match.group(1), 0)
 
-GICD, GICD_SIZE = 0x17a00000, 0x10000
-GICR, GICR_SIZE = 0x17a60000, 0x100000
-FB, FB_SIZE = 0xe1000000, 0x2300000  # A52s live-DT cont_splash_region
+
+# /arm-io children are relative to this; it must not be 0 (serial_init bails).
+SOC_BASE = a52s_profile_value('A52S_SOC_BASE')
+GICD, GICD_SIZE = (a52s_profile_value('A52S_GICD_BASE'),
+                   a52s_profile_value('A52S_GICD_SIZE'))
+GICR, GICR_SIZE = (a52s_profile_value('A52S_GICR_BASE'),
+                   a52s_profile_value('A52S_GICR_SIZE'))
+FB, FB_SIZE = (a52s_profile_value('A52S_FB_BASE'),
+               a52s_profile_value('A52S_FB_SIZE'))
 SWEET_ECID = 0x4135325358000001  # 'A52SX' + 1, synthetic
-FB_W, FB_H, FB_STRIDE = 1080, 2400, 1080 * 4
-# Internal UFS host (ufshc@1d84000 "ufs_mem"); QEMU virt has none
-UFS, UFS_SIZE = 0x01d84000, 0x3000
-TIMEBASE = 19200000
+FB_W, FB_H, FB_STRIDE = (a52s_profile_value('A52S_FB_WIDTH'),
+                         a52s_profile_value('A52S_FB_HEIGHT'),
+                         a52s_profile_value('A52S_FB_STRIDE'))
+# Internal UFS host (ufshc@1d84000 "ufs_mem"); QEMU virt has none.
+UFS, UFS_SIZE = (a52s_profile_value('A52S_UFS_HOST_BASE'),
+                 a52s_profile_value('A52S_UFS_HOST_SIZE'))
+UFS_PHY = a52s_profile_value('A52S_UFS_PHY_BASE')
+UFS_ICE = a52s_profile_value('A52S_UFS_ICE_BASE')
+UFS_IRQ = a52s_profile_value('A52S_UFS_IRQ')
+TIMEBASE = a52s_profile_value('A52S_TIMEBASE_HZ')
 VTIMER_INTID = 19
 # QEMU virt (-M virt,gic-version=3 -cpu cortex-a76): GICD/GICR and the generic timer's CNTFRQ
 QEMU_GICD, QEMU_GICR, QEMU_TIMEBASE = 0x08000000, 0x080a0000, 62500000
@@ -129,16 +151,18 @@ def build(seed=None, qemu=False, highmem=False, no_display=False):
         # with CSR_ALLOW_UNRESTRICTED_FS (vm_unix.c shared region checks).
         node('asmb', [ph(), ('lp-sip0', u64(0x6f)), ('lp-sip1', u32(1))])])
 
-    # SWEET SMP: all eight cores in physical-core order (0-5 Cortex-A55,
-    # 6-7 Cortex-A76), one homogeneous cluster. The kernel defaults to one
-    # and uses cpus=N to select an initial prefix (N <= 8).
+    # A52s SMP: eight cores in physical-core order. The captured CPU data
+    # records CPUs 0-3 as Cortex-A55 (MIDR part 0xd05) and CPUs 4-7 as
+    # Cortex-A78 (0xd41).  Keep the existing single XNU scheduling cluster:
+    # its SMP driver is intentionally not yet an AMP/three-cluster driver.
+    # The physical MPIDRs below are the authoritative bootstrap topology.
     # QEMU retains its original single-CPU tree: its MPIDRs differ from sweet.
     cpu_nodes = []
-    for core in range(1 if qemu else 8):
+    for core in range(1 if qemu else a52s_profile_value('A52S_CPU_COUNT')):
         cpu_nodes.append(node(f'cpu{core}', [
             ph(),
             ('device_type', cstr('cpu')),
-            ('compatible', cstr('qcom,kryo670') + cstr('ARM,v8')),
+            ('compatible', cstr('qcom,kryo') + cstr('ARM,v8')),
             ('reg', u32(core << 8)),  # actual MPIDR Aff1:Aff0, NOT logical ID
             ('cpu-id', u32(core)),   # descriptive: XNU assigns IDs by DT order
             ('cluster-id', u32(0)),  # descriptive; see ml_parse_cpu_topology
@@ -205,6 +229,12 @@ def build(seed=None, qemu=False, highmem=False, no_display=False):
         ph(),
         ('compatible', cstr('qcom,ufshc')),
         ('reg', u64(UFS, UFS_SIZE)),
+        # sweet_ufs is deliberately polled today; retain the live IRQ and
+        # companion blocks in the ADT so a future interrupt/PHY driver does
+        # not copy the old SM7150 map back in.
+        ('interrupt', u32(UFS_IRQ)),
+        ('phy-base', u64(UFS_PHY)),
+        ('ice-base', u64(UFS_ICE)),
     ])
 
     # pmap_compute_max_asids requires the node even when no overrides are set.

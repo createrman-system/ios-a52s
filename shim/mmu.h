@@ -1,7 +1,8 @@
 #pragma once
 #include <stdint.h>
+#include "a52s_profile.h"
 
-#define FB_PHYS	0xe1000000UL
+#define FB_PHYS	A52S_FB_BASE
 
 struct mmu_info {
 	uint64_t img_lo, img_hi, ttbr;
