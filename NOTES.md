@@ -1,3 +1,39 @@
+## A52s serial-I/O-off diagnostic image (2026-10-25)
+
+**Owner-reported result:** booting `shim-boot-a52s-kdp-none.img` did not move
+past the same general XNU startup region. The owner reports zones, VM,
+scheduler/background-quantum, and console-handler messages, followed by no
+further progress; the persistent userdata read remains headerless and has no
+readable strings. This does not establish whether execution is stuck in the
+last printed subsystem.
+
+**CPU-count check:** `cpus=1` would not be a useful next change. The existing
+SWEET patch defaults the CPU request to one when `cpus` is absent or zero
+(`xnu/patches/0065-sweet-smp-psci.patch`, added lines around 295–296), and the
+current image has no `cpus` argument. Do not treat the observed hang as evidence
+that all eight cores are running.
+
+**Prepared next image:** retain `kdp_match_name=none` and change only the
+serial mode from `serial=3` to `serial=0`, disabling serial input/output while
+leaving the ARM64 video-console path selected. Command line:
+`debug=0xc serial=0 keepsyms=1 -noprogress sweettouch=0 kdp_match_name=none`.
+The timer NOP and high-memory ADT are unchanged; `a52sstmfts=1` remains absent.
+Reused kernel from CI `40164381626` (SHA-256
+`299B632647116B6F0378927B4FF5B57E5609C7953B2B94A8B653FCF757932A64`); only
+the payload arguments changed, so no XNU CI run was needed. Unpacked ramdisk
+matches payload. Image `shim/out/shim-boot-a52s-serial-off.img` is
+17,461,248 bytes, SHA-256
+`195B924EF05F0C23398825F87BD448CDC57DC36F8B7EABC0AFF14E890AFF05F9`.
+It has not been booted. No partition was written.
+
+**Next:** temporary-boot this image and record the exact last visible line.
+If the video console still reports a stall with serial mode off, the stall is
+not caused by the serial I/O mode; next add a source-level breadcrumb immediately
+after the last confirmed XNU startup call and build that through CI. The UFS
+logger cannot preserve earlier output until its UFS probe/start path is reached.
+
+---
+
 ## A52s boot stall: serial KDP isolation image (2026-10-25)
 
 **Owner-reported observation:** the temporary timer-NOP image settled at the
