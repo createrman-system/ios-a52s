@@ -1,0 +1,28 @@
+diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
+--- a/osfmk/kern/startup.c
++++ b/osfmk/kern/startup.c
+@@ -386,5 +386,15 @@ kernel_startup_initialize_upto(startup_subsystem_id_t upto)
+ 		startup_phase = cur->subsystem - 1;
+ 		kernel_startup_log(cur->subsystem);
++		bool trace_lockdown_hook = (upto == STARTUP_SUB_LOCKDOWN &&
++		    cur->subsystem == STARTUP_SUB_LOCKDOWN);
++		if (trace_lockdown_hook) {
++			printf("SWEET TRACE: lockdown hook start rank=%d fn=%p\n",
++			    cur->rank, cur->func);
++		}
+ 		cur->func(cur->arg);
++		if (trace_lockdown_hook) {
++			printf("SWEET TRACE: lockdown hook return rank=%d fn=%p\n",
++			    cur->rank, cur->func);
++		}
+ 		startup_entry_cur = ++cur;
+ 	}
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -193,4 +193,5 @@ AppleCLCD::start(IOService *provider)
+ 	IOLog("SWEET FB: AppleCLCD %ux%u stride %u at 0x%llx, default surface %u, presented as %ux%u\n",
+ 	    fWidth, fHeight, fRowBytes, fPhys, fSurface->id, fLogicalW, fLogicalH);
++	IOLog("SWEET TRACE: AppleCLCD::start returning\n");
+ 	return true;
+ }
