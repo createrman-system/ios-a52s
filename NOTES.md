@@ -964,3 +964,5 @@ Packaged with the existing A52s high-memory ADT `shim/out/a52s-40164381626-highm
 **Boot policy:** retain `sweettouch=0`, `nointr_consio=1`, existing A52s high-memory ADT and physical-timer NOP workaround. Keep `a52sstmfts=1` absent. Do not write any phone partition.
 
 **State:** patch prepared; CI and packaging pending. After CI, verify patch 0088 was applied and every expected trace string is embedded before preparing a temporary boot image. Human boot should use `fastboot boot` only.
+
+**CI patch-application correction (2026-10-26):** first run `40273588230` completed successfully as a build but skipped patch 0088 because the separate callback-completion hunk failed to match the file after the earlier hunk. Its artifact is not valid for this diagnostic and must not be booted. Consolidated the entire first-vsync function instrumentation into one hunk generated against the exact new `SweetFramebuffer.cpp` contents after patch 0087; synthetic checks now apply both the IOService and framebuffer changes. Rerun CI before artifact packaging.

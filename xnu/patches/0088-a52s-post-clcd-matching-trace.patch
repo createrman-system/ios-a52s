@@ -66,7 +66,8 @@ diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
 diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
 --- a/iokit/Kernel/arm/SweetFramebuffer.cpp
 +++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
-@@ -1176,9 +1176,14 @@ AppleCLCD::vsyncFired(OSObject *owner, IOTimerEventSource *sender)
+@@ -172,10 +172,15 @@
+ AppleCLCD::vsyncFired(OSObject *owner, IOTimerEventSource *sender)
  {
  	AppleCLCD *fb = (AppleCLCD *)owner;
 +	if (fb->fVsyncCount == 0) {
@@ -81,10 +82,13 @@ diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFrame
  	}
  	uint64_t now = mach_absolute_time();
  	uint64_t count = ++fb->fVsyncCount;
-@@ -1190,3 +1195,6 @@ AppleCLCD::vsyncFired(OSObject *owner, IOTimerEventSource *sender)
+@@ -193,6 +198,9 @@
+ 	}
  	IOLockUnlock(fb->fLock);
  	sender->setTimeoutUS(SWEET_FB_VSYNC_US);
 +	if (count == 1) {
 +		IOLog("SWEET TRACE: AppleCLCD first vsync callback completed\n");
 +	}
  }
+ 
+ void
