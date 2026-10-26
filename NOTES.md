@@ -982,3 +982,13 @@ Packaged with the existing A52s high-memory ADT `shim/out/a52s-40164381626-highm
 **Boot args:** `debug=0xc serial=0 keepsyms=1 -noprogress sweettouch=0 kdp_match_name=none startup_debug=0 rd=ufsroot0 nointr_consio=1`. `a52sstmfts=1`, `ufsrw=1`, and `rootrw=1` remain absent. No device boot has been performed and no partition was written.
 
 **Next human action:** from the repository root, use `fastboot boot shim/out/shim-boot-a52s-post-clcd-trace.img`. Report the final `SWEET TRACE` line, especially whether the AppleCLCD caller saw `start return`, candidate processing returned, first vsync entered, and deferred `registerService()` returned. Use only temporary boot; do not flash.
+
+## A52s post-AppleCLCD match-loop trace prepared (2026-10-26)
+
+**Owner observation:** latest boot reports AppleCLCD caller before start, `AppleCLCD::start returning`, caller after start, and client-matching returned; then output stops. This means the AppleCLCD start call and candidate's client matching returned. The next code to localize is the surrounding provider's `IOService::doServiceMatch()` completion: its match loop, matched notifiers, busy accounting, and return to its caller.
+
+**Diagnostic change:** added `xnu/patches/0089-a52s-iokit-post-client-match-trace.patch`. When `probeCandidates()` finishes the AppleCLCD candidate, a one-shot flag enables trace-only markers in the provider's `doServiceMatch()` after `probeCandidates`, after each matching-loop decision, around matched notifiers, after busy adjustment, and at function return. Provider name and `keepGuessing` state are included. It does not change matching behavior. The synthetic source was formed by applying 0088 to XNU 8796.141.3 before generating 0089; sequential application check is being verified against a fresh scratch copy.
+
+**Boot policy:** preserve `nointr_consio=1`, `sweettouch=0`, high-memory ADT, and the timer NOP workaround. Keep `a52sstmfts=1` absent. No partition writes.
+
+**State:** 0089 prepared; next commit/push, run CI, verify the patch was applied and the strings are in the kernel, then package a new temporary boot image. No new image has been booted.

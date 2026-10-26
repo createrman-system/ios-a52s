@@ -1,0 +1,90 @@
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -70,6 +70,7 @@
+ #define LOG kprintf
+ //#define LOG IOLog
+ #define MATCH_DEBUG     0
++static bool sweetTraceAppleCLCDCandidateReturned;
+ #define IOSERVICE_OBFUSCATE(x) ((void *)(VM_KERNEL_ADDRPERM(x)))
+ 
+ // disabled since lockForArbitration() can be held externally
+@@ -4906,6 +4907,7 @@
+ 
+ 	if (0 == strcmp(service->getName(), "AppleCLCD")) {
+ 		IOLog("SWEET TRACE: AppleCLCD candidate processing returned ok=%d\n", ok);
++		sweetTraceAppleCLCDCandidateReturned = true;
+ 	}
+ 	return ok;
+ }
+@@ -5262,6 +5264,7 @@
+ 	bool                keepGuessing = true;
+ 	bool                reRegistered = true;
+ 	bool                didRegister;
++	bool                traceAppleCLCDMatch = false;
+ 	OSArray *           notifiers[2] = {NULL};
+ 
+ //    job->nub->deliverNotification( gIOPublishNotification,
+@@ -5319,6 +5322,12 @@
+ 					resourceKeys = copyPropertyKeys();
+ 				}
+ 				probeCandidates( matches );
++				if (sweetTraceAppleCLCDCandidateReturned) {
++					sweetTraceAppleCLCDCandidateReturned = false;
++					traceAppleCLCDMatch = true;
++					IOLog("SWEET TRACE: AppleCLCD provider doServiceMatch resumed after probeCandidates provider=%s\n",
++					    getName());
++				}
+ 			} else {
+ 				matches->release();
+ 			}
+@@ -5330,12 +5339,21 @@
+ 		    (reRegistered || (catalogGeneration !=
+ 		    gIOCatalogue->getGenerationCount()))
+ 		    && (0 == (__state[0] & kIOServiceInactiveState));
++		if (traceAppleCLCDMatch) {
++			IOLog("SWEET TRACE: AppleCLCD provider matching loop keepGuessing=%d reRegistered=%d\n",
++			    keepGuessing, reRegistered);
++		}
+ 
+ 		if (keepGuessing) {
+ 			unlockForArbitration();
+ 		}
+ 	}
+ 
++	if (traceAppleCLCDMatch) {
++		IOLog("SWEET TRACE: AppleCLCD provider matching loop exited inactive=%d moduleStall=%d\n",
++		    0 != (__state[0] & kIOServiceInactiveState),
++		    0 != (__state[1] & kIOServiceModuleStallState));
++	}
+ 	if ((0 == (__state[0] & kIOServiceInactiveState))
+ 	    && (0 == (__state[1] & kIOServiceModuleStallState))) {
+ 		if (resourceKeys) {
+@@ -5357,15 +5375,27 @@
+ 		resourceKeys->release();
+ 	}
+ 
++	if (traceAppleCLCDMatch) {
++		IOLog("SWEET TRACE: AppleCLCD provider before matched notifiers\n");
++	}
+ 	invokeNotifiers(&notifiers[0]);
+ 	invokeNotifiers(&notifiers[1]);
++	if (traceAppleCLCDMatch) {
++		IOLog("SWEET TRACE: AppleCLCD provider matched notifiers returned\n");
++	}
+ 
+ 	lockForArbitration();
+ 	__state[1] &= ~kIOServiceConfigState;
+ 	scheduleTerminatePhase2();
+ 
+ 	_adjustBusy( -1 );
++	if (traceAppleCLCDMatch) {
++		IOLog("SWEET TRACE: AppleCLCD provider doServiceMatch completed busy adjustment\n");
++	}
+ 	unlockForArbitration();
++	if (traceAppleCLCDMatch) {
++		IOLog("SWEET TRACE: AppleCLCD provider doServiceMatch returning\n");
++	}
+ }
+ 
+ UInt32
