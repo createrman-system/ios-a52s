@@ -954,3 +954,13 @@ Packaged with the existing A52s high-memory ADT `shim/out/a52s-40164381626-highm
 **Boot args:** `debug=0xc serial=0 keepsyms=1 -noprogress sweettouch=0 kdp_match_name=none startup_debug=0 rd=ufsroot0 nointr_consio=1`. No `a52sstmfts=1`; STM remains disabled. The extra `nointr_consio=1` is retained because the prior trace configuration panicked when console I/O ran with interrupts disabled.
 
 **Next action:** human may temporarily boot with `fastboot boot shim/out/shim-boot-a52s-lockdown-trace.img`. Record the first `SWEET TRACE: lockdown hook start` with no matching return (rank and callback pointer), or whether AppleCLCD's `start returning` appears, and the final screen lines. This distinguishes a stall within AppleCLCD from a later LOCKDOWN hook. Continue to avoid all partition writes.
+
+## A52s post-AppleCLCD caller and first-vsync trace (2026-10-26)
+
+**Owner observation:** the latest `shim-boot-a52s-lockdown-trace.img` reports `SWEET TRACE: AppleCLCD::start returning` as the final line. This confirms the method reaches its return-site marker, but by itself does not show whether IOKit's caller completes subsequent candidate processing, nor whether the scheduled first vsync workloop fires.
+
+**Diagnostic change prepared:** added `xnu/patches/0088-a52s-post-clcd-matching-trace.patch`. For AppleCLCD only, `IOService::probeCandidates()` reports just before/after `service->start()`, after sleep-action setup, before matching cleanup, and when candidate processing returns. AppleCLCD `registerService()` reports its `startMatching()` boundary. The first `vsyncFired()` callback reports entry, brackets its deferred `registerService()`, and reports callback completion. This traces both the synchronous IOKit caller and the async workloop path without logging every service or every frame. Source context checked against XNU `xnu-8796.141.3` and synthetic application after patch 0087. This is diagnostic instrumentation; it does not change display behavior.
+
+**Boot policy:** retain `sweettouch=0`, `nointr_consio=1`, existing A52s high-memory ADT and physical-timer NOP workaround. Keep `a52sstmfts=1` absent. Do not write any phone partition.
+
+**State:** patch prepared; CI and packaging pending. After CI, verify patch 0088 was applied and every expected trace string is embedded before preparing a temporary boot image. Human boot should use `fastboot boot` only.

@@ -1,0 +1,90 @@
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -1019,6 +1019,7 @@ IOService::registerService( IOOptionBits options )
+ 	int                 len;
+ 	enum { kMaxPathLen  = 256 };
+ 	enum { kMaxChars    = 63 };
++	bool traceAppleCLCD = (0 == strcmp(getName(), "AppleCLCD"));
+ 
+ 	IORegistryEntry * parent = this;
+ 	IORegistryEntry * root = getRegistryRoot();
+@@ -1063,5 +1064,11 @@ IOService::registerService( IOOptionBits options )
+ 		IOLog( "%s\n", path );
+ 	}
+ 
++	if (traceAppleCLCD) {
++		IOLog("SWEET TRACE: AppleCLCD registerService before startMatching\n");
++	}
+ 	startMatching( options );
++	if (traceAppleCLCD) {
++		IOLog("SWEET TRACE: AppleCLCD registerService returned from startMatching\n");
++	}
+ }
+@@ -4848,8 +4855,16 @@ IOService::probeCandidates( OSOrderedSet * matches )
+ 	if (recordTime) {
+ 		clock_get_uptime(&startTime);
+ 	}
+ 
++	if (0 == strcmp(service->getName(), "AppleCLCD")) {
++		IOLog("SWEET TRACE: AppleCLCD caller before service->start provider=%s\n",
++		    getName());
++	}
+ 	ok = service->start(this);
++	if (0 == strcmp(service->getName(), "AppleCLCD")) {
++		IOLog("SWEET TRACE: AppleCLCD caller saw start return ok=%d provider=%s\n",
++		    ok, getName());
++	}
+ 
+ 	if (recordTime) {
+ 		clock_get_uptime(&endTime);
+@@ -4869,6 +4877,9 @@ IOService::probeCandidates( OSOrderedSet * matches )
+ 
+ 	if (ok) {
+ 		IOInstallServiceSleepPlatformActions(service);
++		if (0 == strcmp(service->getName(), "AppleCLCD")) {
++			IOLog("SWEET TRACE: AppleCLCD caller installed sleep actions\n");
++		}
+ #if 00
+ 		if (!strcmp("XHC1", getName())) {
+ 			service->setProperty(gIOPrimaryDriverTerminateOptionsKey, kOSBooleanTrue);
+@@ -4881,8 +4893,14 @@ IOService::probeCandidates( OSOrderedSet * matches )
+ 	}
+ 
+ 	if (ph) {
++		if (0 == strcmp(service->getName(), "AppleCLCD")) {
++			IOLog("SWEET TRACE: AppleCLCD caller before matchingEnd\n");
++		}
+ 		IOServicePH::matchingEnd(this);
+ 	}
+ 
++	if (0 == strcmp(service->getName(), "AppleCLCD")) {
++		IOLog("SWEET TRACE: AppleCLCD candidate processing returned ok=%d\n", ok);
++	}
+ 	return ok;
+ }
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -1176,9 +1176,14 @@ AppleCLCD::vsyncFired(OSObject *owner, IOTimerEventSource *sender)
+ {
+ 	AppleCLCD *fb = (AppleCLCD *)owner;
++	if (fb->fVsyncCount == 0) {
++		IOLog("SWEET TRACE: AppleCLCD first vsync callback entered\n");
++	}
+ 	if (!fb->fRegistered) {
+ 		fb->fRegistered = true;
+ 		IOLog("SWEET FB: deferred registerService\n");
++		IOLog("SWEET TRACE: AppleCLCD deferred registerService begin\n");
+ 		fb->registerService();
++		IOLog("SWEET TRACE: AppleCLCD deferred registerService returned\n");
+ 	}
+ 	uint64_t now = mach_absolute_time();
+ 	uint64_t count = ++fb->fVsyncCount;
+@@ -1190,3 +1195,6 @@ AppleCLCD::vsyncFired(OSObject *owner, IOTimerEventSource *sender)
+ 	IOLockUnlock(fb->fLock);
+ 	sender->setTimeoutUS(SWEET_FB_VSYNC_US);
++	if (count == 1) {
++		IOLog("SWEET TRACE: AppleCLCD first vsync callback completed\n");
++	}
+ }
