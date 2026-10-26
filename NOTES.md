@@ -992,3 +992,15 @@ Packaged with the existing A52s high-memory ADT `shim/out/a52s-40164381626-highm
 **Boot policy:** preserve `nointr_consio=1`, `sweettouch=0`, high-memory ADT, and the timer NOP workaround. Keep `a52sstmfts=1` absent. No partition writes.
 
 **State:** 0089 prepared; next commit/push, run CI, verify the patch was applied and the strings are in the kernel, then package a new temporary boot image. No new image has been booted.
+
+## A52s post-client-match trace image handoff (2026-10-26)
+
+**Owner observation:** the latest boot reports `AppleCLCD caller before service-start`, `AppleCLCD::start returning`, `AppleCLCD caller after start`, and `AppleCLCD client matching returned`, then stops shortly afterward without panic.
+
+**Trace change/build:** commit `2676764` adds `xnu/patches/0089-a52s-iokit-post-client-match-trace.patch`. After AppleCLCD candidate processing returns, it enables provider-scoped breadcrumbs after `probeCandidates()`, at matching-loop decisions and exit, before/after matched notifiers, after busy adjustment, and on `doServiceMatch()` return. GitHub Actions run `40327582424` succeeded; its log confirms 0089 applied. Artifact ID `12652312230`; kernel SHA-256 `4e293bac4d024ac624aa81252f929270bc3a114e07c6fdef8d18f99d153781dc`. Verified all seven provider-side markers in the kernel.
+
+**Temporary image:** uses the existing high-memory A52s ADT and `--skip-a52s-physical-timer` workaround. Payload SHA-256 `a06037cfe29caa43f46fb204c30924e51f29a952f2afc0876f31392ca3045bf2`; unpacked ramdisk hash matches. Image `shim/out/shim-boot-a52s-post-client-match-trace.img`, SHA-256 `5c8ec49323b10c59ba9d15d2eef22bb454d78a3a3d8dca237b3b002fba2163f6`.
+
+**Boot args:** `debug=0xc serial=0 keepsyms=1 -noprogress sweettouch=0 kdp_match_name=none startup_debug=0 rd=ufsroot0 nointr_consio=1`. `a52sstmfts=1`, `ufsrw=1`, and `rootrw=1` are absent. No handset boot has occurred and no partition was written.
+
+**Next action:** human may temporarily boot with `fastboot boot shim/out/shim-boot-a52s-post-client-match-trace.img`. Report the last provider-side trace line and its `keepGuessing`/`reRegistered` values. No partition writes.
