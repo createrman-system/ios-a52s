@@ -970,3 +970,15 @@ Packaged with the existing A52s high-memory ADT `shim/out/a52s-40164381626-highm
 **Second CI correction:** run `40274468534` also skipped patch 0088; the first callback hunk applied but its separate tail hunk did not match after patch offsets. That artifact lacks the complete intended trace and must not be booted. Rebuilt the framebuffer diff as one contiguous hunk spanning the whole callback; local synthetic application passes. Commit and CI rerun are pending.
 
 **Third CI correction:** run `40275223287` again skipped patch 0088; the unified hunk used too much leading context and failed against the runner's framebuffer source layout. The immediate IOService markers are locally applicable. Reduced the framebuffer hunk to one short context block at the beginning of `vsyncFired()`, retaining first-callback entry and deferred-`registerService()` begin/return markers only. Synthetic application passes. Its artifact is not valid and must not be booted; rerun CI.
+
+## A52s post-AppleCLCD caller and first-vsync image (2026-10-26)
+
+**Owner observation:** the most recent boot ends at `SWEET TRACE: AppleCLCD::start returning`, so the start method's return-site marker prints, while no later output was reported.
+
+**Diagnostic patch/build:** patch 0088 now places AppleCLCD-only markers immediately around the IOKit caller's `service->start()` and candidate cleanup, around AppleCLCD's own `registerService()`/`startMatching()` boundary, and in the first `vsyncFired()` callback around its deferred registration. These distinguish synchronous probe return from the asynchronous first-vsync workloop and deferred matching. GitHub Actions run `40276110494` succeeded, and the patch log confirms 0088 was applied. Artifact ID `12629993738`; kernel SHA-256 `38f46d5ff069362dd002521f4aa1948e9214428b4b880b4687d4dc5f5a1e3d7e`. Verified all markers in the binary, including caller start return, candidate processing returned, first vsync entry, and deferred registerService begin/return.
+
+**Temporary image:** generated using `shim/out/a52s-40164381626-highmem.adt`, with the existing `--skip-a52s-physical-timer` workaround. Payload SHA-256 `67e56c06519d20ed35524fb164e10b709f7419a021790d2ae11b4b7e98a09b37`; unpacked image ramdisk hash matches. Image `shim/out/shim-boot-a52s-post-clcd-trace.img`, SHA-256 `067e570f974e8dc5a3f76d7a4c909b0b3a9d1153c6331a563a4abc2a6efa8490`.
+
+**Boot args:** `debug=0xc serial=0 keepsyms=1 -noprogress sweettouch=0 kdp_match_name=none startup_debug=0 rd=ufsroot0 nointr_consio=1`. `a52sstmfts=1`, `ufsrw=1`, and `rootrw=1` remain absent. No device boot has been performed and no partition was written.
+
+**Next human action:** from the repository root, use `fastboot boot shim/out/shim-boot-a52s-post-clcd-trace.img`. Report the final `SWEET TRACE` line, especially whether the AppleCLCD caller saw `start return`, candidate processing returned, first vsync entered, and deferred `registerService()` returned. Use only temporary boot; do not flash.
