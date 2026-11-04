@@ -1,0 +1,52 @@
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -70,6 +70,8 @@
+ #define LOG kprintf
+ //#define LOG IOLog
+ #define MATCH_DEBUG     0
++static bool sweetTracePostCLCD = false;
++static int sweetTracePostCLCDProviderCount = 0;
+ #define IOSERVICE_OBFUSCATE(x) ((void *)(VM_KERNEL_ADDRPERM(x)))
+ 
+ // disabled since lockForArbitration() can be held externally
+@@ -5400,6 +5402,20 @@
+ 	unlockForArbitration();
+ }
+ 
++static void
++sweetTraceProviderMatchLoop(const char *providerName, const char *phase)
++{
++	if (strcmp(providerName, "AppleCLCD") == 0) {
++		sweetTracePostCLCD = true;
++	}
++	if (sweetTracePostCLCD) {
++		IOLog("SWEET TRACE: provider match loop %s provider=%s count=%d\n",
++		    phase, providerName, ++sweetTracePostCLCDProviderCount);
++	}
++	if (sweetTracePostCLCD && strcmp(providerName, "AppleCLCD") != 0) {
++		sweetTracePostCLCD = false;
++	}
++}
++
+ UInt32
+ IOService::getBusyState() const
+ {
+@@ -5500,6 +5516,7 @@
+ 	// This is the main matching loop
+ 	while (provider = getNextProvider()) {
++		sweetTraceProviderMatchLoop(provider->getName(), "before doServiceMatch");
+ 		provider->doServiceMatch();
++		sweetTraceProviderMatchLoop(provider->getName(), "after doServiceMatch");
+ 	}
+ }
+ 
+@@ -5600,6 +5617,10 @@
+ 	}
+ 
++	if (sweetTracePostCLCD) {
++		IOLog("SWEET TRACE: provider match loop completed\n");
++	}
++
+ 	return;
+ }
+ 
