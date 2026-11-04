@@ -1,0 +1,45 @@
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -70,6 +70,8 @@
+ #define LOG kprintf
+ //#define LOG IOLog
+ #define MATCH_DEBUG     0
++static bool sweetTracePostCLCD = false;
++static int sweetTracePostCLCDCount = 0;
+ #define IOSERVICE_OBFUSCATE(x) ((void *)(VM_KERNEL_ADDRPERM(x)))
+
+ // disabled since lockForArbitration() can be held externally
+@@ -6047,6 +6049,14 @@
+ 	case kMatchNubJob:
+ 		nub->doServiceMatch( job->options );
+ 		break;
++		if (strcmp(nub->getName(), "AppleCLCD") == 0) {
++			sweetTracePostCLCD = true;
++		}
++		if (sweetTracePostCLCD) {
++			IOLog("SWEET TRACE: config thread post doServiceMatch provider=%s count=%d\n",
++			    nub->getName(), ++sweetTracePostCLCDCount);
++		}
+
+ 	default:
+ 		LOG("config(%p): strange type (%d)\n",
+@@ -6080,6 +6090,10 @@
+ 	IOLockLock( gJobsLock );
+ 	do {
+ 		wait = (0 != gNumConfigThreads);
++		if (sweetTracePostCLCD) {
++			IOLog("SWEET TRACE: waitMatchIdle gNumConfigThreads=%d\n", gNumConfigThreads);
++		}
+ 		if (wait) {
+ 			if (msToWait) {
+@@ -6093,6 +6107,10 @@
+ 	} while (wait && (waitResult != THREAD_TIMED_OUT));
+ 	IOLockUnlock( gJobsLock );
+
++	if (sweetTracePostCLCD) {
++		IOLog("SWEET TRACE: waitMatchIdle returning waitResult=%d\n", waitResult);
++	}
++
+ 	if (waitResult == THREAD_TIMED_OUT) {
+ 		return kIOReturnTimeout;
+ 	} else {
